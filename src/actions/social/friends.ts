@@ -5,10 +5,6 @@ import { authActionClient } from '@/lib/safe-action';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 
-type FriendStatus = 'PENDING' | 'ACCEPTED' | 'BLOCKED';
-
-
-
 /**
  * Send friend request.
  */
