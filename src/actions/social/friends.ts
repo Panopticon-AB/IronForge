@@ -54,7 +54,7 @@ export const acceptFriendRequestAction = authActionClient
  */
 export const declineFriendRequestAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: requestId, ctx: { userId: _userId } }) => {
+  .action(async ({ parsedInput: requestId }) => {
     try {
       console.log(`Declined friend request ${requestId}`);
       revalidatePath('/friends');
