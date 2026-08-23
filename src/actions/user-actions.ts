@@ -27,11 +27,11 @@ const SENSITIVE_USER_FIELDS = [
 function sanitizeUser(user: User | null): SafeUser | null {
   if (!user) return null;
 
-  const safeUser = { ...user };
-  const redactedUser = safeUser as Partial<User>;
-  for (const field of SENSITIVE_USER_FIELDS) {
-    delete redactedUser[field];
-  }
+  const safeUser = Object.fromEntries(
+    Object.entries(user).filter(
+      ([key]) => !SENSITIVE_USER_FIELDS.includes(key as (typeof SENSITIVE_USER_FIELDS)[number])
+    )
+  );
 
   return safeUser as SafeUser;
 }
