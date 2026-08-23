@@ -1,9 +1,4 @@
-import { BioBuff } from '@/features/bio/BioBuffService';
 import { prisma } from '@/lib/prisma';
-import { ProgressionService } from '@/services/progression';
-import type { IntervalsWellness } from '@/types';
-import { revalidatePath } from 'next/cache';
-import { GameContextService } from './GameContextService';
 
 export class TitanService {
   static async getTitan(userId: string) {

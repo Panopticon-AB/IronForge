@@ -2,7 +2,7 @@
 
 import { cn } from '@/lib/utils';
 import { motion } from 'framer-motion';
-import { Castle, Mountain, Shield, Sword, Target, Waves, Zap } from 'lucide-react';
+import { Castle, Shield, Target, Zap } from 'lucide-react';
 import React, { memo } from 'react';
 import { Handle, Position } from 'reactflow';
 

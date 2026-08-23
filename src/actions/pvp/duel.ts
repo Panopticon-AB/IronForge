@@ -16,7 +16,6 @@ const _DuelChallengeSchema = z.object({
   wager: z.number().optional(),
 });
 
-type DuelChallengeInput = z.infer<typeof _DuelChallengeSchema>;
 
 export const createDuelChallengeAction = authActionClient
   .schema(

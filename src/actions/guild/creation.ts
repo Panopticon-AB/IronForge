@@ -22,20 +22,6 @@ const GuildSettingsSchema = z.object({
 });
 */
 
-interface GuildInfo {
-  id: string;
-  name: string;
-  tag: string;
-  description?: string;
-  leaderId: string;
-  leaderName: string;
-  memberCount: number;
-  level: number;
-  xp: number;
-  createdAt: Date;
-  isPublic: boolean;
-  minLevel: number;
-}
 
 /**
  * Create a new guild.

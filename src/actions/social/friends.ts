@@ -7,24 +7,7 @@ import { z } from 'zod';
 
 type FriendStatus = 'PENDING' | 'ACCEPTED' | 'BLOCKED';
 
-interface Friend {
-  id: string;
-  heroName: string;
-  level: number;
-  avatarUrl?: string;
-  isOnline: boolean;
-  lastActive: Date;
-  titanClass?: string;
-  friendSince: Date;
-}
 
-interface FriendRequest {
-  id: string;
-  fromUser: { id: string; heroName: string; level: number };
-  toUserId: string;
-  status: FriendStatus;
-  createdAt: Date;
-}
 
 /**
  * Send friend request.
@@ -59,7 +42,7 @@ export const sendFriendRequestAction = authActionClient
  */
 export const acceptFriendRequestAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: requestId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: requestId }) => {
     try {
       console.log(`Accepted friend request ${requestId}`);
       revalidatePath('/friends');
@@ -75,7 +58,7 @@ export const acceptFriendRequestAction = authActionClient
  */
 export const declineFriendRequestAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: requestId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: requestId, ctx: { userId: _userId } }) => {
     try {
       console.log(`Declined friend request ${requestId}`);
       revalidatePath('/friends');
@@ -91,7 +74,7 @@ export const declineFriendRequestAction = authActionClient
  */
 export const removeFriendAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: friendId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: friendId }) => {
     try {
       console.log(`Removed friend ${friendId}`);
       revalidatePath('/friends');
@@ -105,7 +88,7 @@ export const removeFriendAction = authActionClient
 /**
  * Get user's friends list.
  */
-export const getFriendsListAction = authActionClient.action(async ({ ctx: { userId } }) => {
+export const getFriendsListAction = authActionClient.action(async () => {
   // MVP: Return sample friends
   return [
     {
@@ -158,7 +141,7 @@ export const getPendingRequestsAction = authActionClient.action(async ({ ctx: { 
  */
 export const searchUsersAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: query, ctx: { userId } }) => {
+  .action(async ({ parsedInput: query }) => {
     if (!query || query.length < 2) return [];
 
     return [

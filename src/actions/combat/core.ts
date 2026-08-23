@@ -2,13 +2,12 @@
 
 import type { BioBuff } from '@/features/bio/BioBuffService';
 import prisma from '@/lib/prisma';
-import { CombatAction, CombatEngine, type CombatState } from '@/services/game/CombatEngine';
+import { CombatEngine, type CombatState } from '@/services/game/CombatEngine';
 import { LootSystem } from '@/services/game/LootSystem';
 import { TitanService } from '@/services/game/TitanService';
 import type { Monster, MonsterType } from '@/types';
 import { PerformCombatActionInputSchema, StartBossFightSchema } from '@/types/schemas';
 import { calculateTitanAttributes } from '@/utils';
-import { createClient } from '@/utils/supabase/server';
 import { revalidatePath } from 'next/cache';
 
 import { authActionClient } from '@/lib/safe-action';

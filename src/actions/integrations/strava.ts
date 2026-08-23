@@ -4,11 +4,7 @@ import { z } from 'zod';
 
 import { processUserCardioActivity } from '@/actions/pvp/duel';
 import prisma from '@/lib/prisma';
-import {
-  type StravaActivity,
-  type StravaTokenResponse,
-  mapStravaActivityToCardioLog,
-} from '@/lib/strava';
+import { mapStravaActivityToCardioLog } from '@/lib/strava';
 import { TerritoryService } from '@/services/game/TerritoryService';
 import {
   StravaActivitySchema,

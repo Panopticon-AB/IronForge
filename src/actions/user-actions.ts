@@ -1,7 +1,6 @@
 'use server';
 
 import prisma from '@/lib/prisma';
-import { AppSettings, Equipment } from '@/types';
 import type { SafeUser } from '@/types/schemas';
 import type { User } from '@prisma/client';
 import { z } from 'zod';
@@ -15,18 +14,18 @@ function sanitizeUser(user: User | null): SafeUser | null {
 
   // Use destructuring to omit sensitive fields
   const {
-    intervalsApiKey,
-    intervalsAthleteId,
-    hevyApiKey,
-    stravaAccessToken,
-    stravaRefreshToken,
-    stravaExpiresAt,
-    stravaAthleteId,
-    garminAccessToken,
-    garminRefreshToken,
-    garminUserSecret,
-    garminUserToken,
-    pocketCastsToken,
+    intervalsApiKey: _intervalsApiKey,
+    intervalsAthleteId: _intervalsAthleteId,
+    hevyApiKey: _hevyApiKey,
+    stravaAccessToken: _stravaAccessToken,
+    stravaRefreshToken: _stravaRefreshToken,
+    stravaExpiresAt: _stravaExpiresAt,
+    stravaAthleteId: _stravaAthleteId,
+    garminAccessToken: _garminAccessToken,
+    garminRefreshToken: _garminRefreshToken,
+    garminUserSecret: _garminUserSecret,
+    garminUserToken: _garminUserToken,
+    pocketCastsToken: _pocketCastsToken,
     ...safeUser
   } = user;
 

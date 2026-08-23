@@ -1,11 +1,9 @@
-import type { LeaderboardEntry } from '@/actions/social/leaderboards';
 import { QuestBoard } from '@/components/gamification/QuestBoard';
 import UltrathinkDashboard from '@/features/dashboard/components/UltrathinkDashboard';
 import { CampaignTracker } from '@/features/game/components/campaign/CampaignTracker';
 import { PocketCastsPlayer } from '@/features/podcast/components/PocketCastsPlayer';
 import type React from 'react';
 import type { DashboardAction, DashboardState } from '../types';
-import { StrengthLeaderboardPanel } from '../widgets/StrengthLeaderboardPanel';
 import { FeedPanel } from './FeedPanel';
 import { QuickActions } from './QuickActions';
 import { StatsHeader } from './StatsHeader';
@@ -16,7 +14,6 @@ interface CitadelProps {
   titanState?: any;
   pocketCastsConnected?: boolean;
   liteMode?: boolean;
-  leaderboardEntries?: LeaderboardEntry[];
 }
 
 export const Citadel: React.FC<CitadelProps> = ({
@@ -25,7 +22,6 @@ export const Citadel: React.FC<CitadelProps> = ({
   titanState,
   pocketCastsConnected,
   liteMode,
-  leaderboardEntries = [],
 }) => (
   <div className="w-full max-w-6xl mx-auto p-4 md:p-6 space-y-8 animate-fade-in">
     <StatsHeader state={state} titanState={titanState} liteMode={liteMode} />

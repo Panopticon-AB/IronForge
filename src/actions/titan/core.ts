@@ -4,7 +4,6 @@ import { getErrorMessage } from '@/lib/error-message';
 import { prisma } from '@/lib/prisma';
 import { authActionClient } from '@/lib/safe-action';
 import { TitanService } from '@/services/game/TitanService';
-import { IntervalsWellness } from '@/types';
 import { revalidatePath } from 'next/cache';
 import { z } from 'zod';
 

@@ -1,13 +1,12 @@
 'use client';
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo } from 'react';
 import ReactFlow, {
   Background,
   Controls,
   Panel,
   useNodesState,
   useEdgesState,
-  MarkerType,
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { setGuildTerritoryTarget } from '@/actions/guild-territories';

@@ -1,6 +1,6 @@
 'use client';
 
-import { Coins, Crown, Swords, Zap } from 'lucide-react';
+import { Coins, Zap } from 'lucide-react';
 import Link from 'next/link';
 import React from 'react';
 
