@@ -14,7 +14,7 @@ export const getSocialFeedAction = authActionClient
       })
       .optional()
   )
-  .action(async () => {
+  .action(() => {
     try {
       // MVP: Return sample feed
       return [
