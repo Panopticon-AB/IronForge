@@ -43,10 +43,9 @@ export type ReadinessGateKind =
   | 'RUNNING_WARMUP'
   | 'SWIMMING_WARMUP';
 
-export interface ReadinessGateRequirement {
-  required: boolean;
-  kind?: ReadinessGateKind;
-}
+export type ReadinessGateRequirement =
+  | { required: true; kind: ReadinessGateKind }
+  | { required: false; kind?: never };
 
 /**
  * A finite activity option that Oracle may evaluate for today's mission.
