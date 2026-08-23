@@ -9,25 +9,29 @@ import { z } from 'zod';
 
 const emailSchema = z.string().email().optional();
 
+const SENSITIVE_USER_FIELDS = [
+  'intervalsApiKey',
+  'intervalsAthleteId',
+  'hevyApiKey',
+  'stravaAccessToken',
+  'stravaRefreshToken',
+  'stravaExpiresAt',
+  'stravaAthleteId',
+  'garminAccessToken',
+  'garminRefreshToken',
+  'garminUserSecret',
+  'garminUserToken',
+  'pocketCastsToken',
+] as const satisfies readonly (keyof User)[];
+
 function sanitizeUser(user: User | null): SafeUser | null {
   if (!user) return null;
 
-  // Use destructuring to omit sensitive fields
-  const {
-    intervalsApiKey: _intervalsApiKey,
-    intervalsAthleteId: _intervalsAthleteId,
-    hevyApiKey: _hevyApiKey,
-    stravaAccessToken: _stravaAccessToken,
-    stravaRefreshToken: _stravaRefreshToken,
-    stravaExpiresAt: _stravaExpiresAt,
-    stravaAthleteId: _stravaAthleteId,
-    garminAccessToken: _garminAccessToken,
-    garminRefreshToken: _garminRefreshToken,
-    garminUserSecret: _garminUserSecret,
-    garminUserToken: _garminUserToken,
-    pocketCastsToken: _pocketCastsToken,
-    ...safeUser
-  } = user;
+  const safeUser = { ...user };
+  const redactedUser = safeUser as Partial<User>;
+  for (const field of SENSITIVE_USER_FIELDS) {
+    delete redactedUser[field];
+  }
 
   return safeUser as SafeUser;
 }
