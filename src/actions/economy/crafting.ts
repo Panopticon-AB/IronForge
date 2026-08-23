@@ -168,7 +168,7 @@ export const getMaterialsAction = authActionClient.action(async () => {
 /**
  * Get available recipes.
  */
-export const getRecipesAction = authActionClient.action(async ({ ctx }) => {
+export const getRecipesAction = authActionClient.action(async () => {
   return RECIPES;
 });
 
