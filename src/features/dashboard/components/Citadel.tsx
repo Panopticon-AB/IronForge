@@ -1,3 +1,4 @@
+import type { LeaderboardEntry } from '@/actions/social/leaderboards';
 import { QuestBoard } from '@/components/gamification/QuestBoard';
 import UltrathinkDashboard from '@/features/dashboard/components/UltrathinkDashboard';
 import { CampaignTracker } from '@/features/game/components/campaign/CampaignTracker';
@@ -14,6 +15,7 @@ interface CitadelProps {
   titanState?: any;
   pocketCastsConnected?: boolean;
   liteMode?: boolean;
+  leaderboardEntries?: LeaderboardEntry[];
 }
 
 export const Citadel: React.FC<CitadelProps> = ({
