@@ -7,6 +7,8 @@ on:
       - '.github/workflows/pr-db-guard.yml'
       - 'scripts/ci/classify-db-guard-impact.mjs'
       - 'scripts/ci/classify-db-guard-impact.test.mjs'
+      - 'scripts/ci/evaluate-prisma-drift-delta.mjs'
+      - 'scripts/ci/evaluate-prisma-drift-delta.test.mjs'
   pull_request_target:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
@@ -20,7 +22,7 @@ permissions:
 
 jobs:
   classifier-self-test:
-    name: "🧪 DB Guard classifier self-test"
+    name: "🧪 DB Guard control-plane self-test"
     if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 5
@@ -32,8 +34,11 @@ jobs:
           ref: ${{ github.event.pull_request.head.sha }}
           fetch-depth: 1
           persist-credentials: false
-      - name: Test DB Guard impact classifier
-        run: node --test scripts/ci/classify-db-guard-impact.test.mjs
+      - name: Test DB Guard control plane
+        run: >-
+          node --test
+          scripts/ci/classify-db-guard-impact.test.mjs
+          scripts/ci/evaluate-prisma-drift-delta.test.mjs
 
   classify-db-impact:
     name: "🧭 Trusted DB impact classifier"
@@ -111,10 +116,10 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
-      DIRECT_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
-      ADMIN_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/postgres?schema=public
-      SHADOW_DATABASE_URL: postgresql://postgres@127.0.0.1:5432/ironforge_shadow_pr_${{ github.event.pull_request.number }}?schema=public
+      DATABASE_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/ironforge_test?schema=public
+      DIRECT_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/ironforge_test?schema=public
+      ADMIN_DATABASE_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/postgres?schema=public
+      SHADOW_DATABASE_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/ironforge_shadow_pr_${{ github.event.pull_request.number }}?schema=public
       TARGET_DB: ironforge_shadow_pr_${{ github.event.pull_request.number }}
       CI: 'true'
       HUSKY: '0'
@@ -123,8 +128,8 @@ jobs:
         image: postgres:16-alpine
         env:
           POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ironforge-ci-local
           POSTGRES_DB: ironforge_test
-          POSTGRES_HOST_AUTH_METHOD: trust
         ports:
           - 5432:5432
         options: >-
@@ -173,22 +178,49 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      - name: Install candidate dependencies without lifecycle scripts
-        working-directory: candidate
-        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Validate candidate schema with trusted Prisma toolchain
+        working-directory: trusted-base
+        run: pnpm exec prisma validate --schema ../candidate/prisma/schema.prisma
 
-      - name: Generate Prisma client explicitly
-        working-directory: candidate
-        run: pnpm exec prisma generate
+      - name: Capture trusted-base and candidate migration drift
+        id: drift
+        shell: bash
+        working-directory: trusted-base
+        env:
+          BASE_DRIFT_FILE: ${{ runner.temp }}/ironforge-base-prisma-drift.sql
+          CANDIDATE_DRIFT_FILE: ${{ runner.temp }}/ironforge-candidate-prisma-drift.sql
+        run: |
+          set -uo pipefail
 
-      - name: Validate Prisma schema
-        working-directory: candidate
-        run: pnpm exec prisma validate
+          set +e
+          pnpm exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema prisma/schema.prisma \
+            --script \
+            --exit-code > "$BASE_DRIFT_FILE"
+          base_status=$?
 
-      - name: Verify migration history matches schema
-        working-directory: candidate
+          pnpm exec prisma migrate diff \
+            --from-migrations ../candidate/prisma/migrations \
+            --to-schema ../candidate/prisma/schema.prisma \
+            --script \
+            --exit-code > "$CANDIDATE_DRIFT_FILE"
+          candidate_status=$?
+          set -e
+
+          printf 'base_status=%s\n' "$base_status" >> "$GITHUB_OUTPUT"
+          printf 'candidate_status=%s\n' "$candidate_status" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce no new Prisma drift relative to trusted base
+        working-directory: trusted-base
+        env:
+          BASE_STATUS: ${{ steps.drift.outputs.base_status }}
+          CANDIDATE_STATUS: ${{ steps.drift.outputs.candidate_status }}
+          BASE_DRIFT_FILE: ${{ runner.temp }}/ironforge-base-prisma-drift.sql
+          CANDIDATE_DRIFT_FILE: ${{ runner.temp }}/ironforge-candidate-prisma-drift.sql
         run: >-
-          pnpm exec prisma migrate diff
-          --from-migrations prisma/migrations
-          --to-schema prisma/schema.prisma
-          --exit-code
+          node scripts/ci/evaluate-prisma-drift-delta.mjs
+          --base-status "$BASE_STATUS"
+          --candidate-status "$CANDIDATE_STATUS"
+          --base-file "$BASE_DRIFT_FILE"
+          --candidate-file "$CANDIDATE_DRIFT_FILE"
