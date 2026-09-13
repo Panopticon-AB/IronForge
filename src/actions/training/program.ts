@@ -1,9 +1,10 @@
 'use server';
 
-import { getWellness } from '@/lib/intervals';
+import { getWellness, type WellnessData } from '@/lib/intervals';
 import prisma from '@/lib/prisma';
 import { AnalyticsService } from '@/services/analytics';
 import { GeminiService } from '@/services/gemini';
+import type { IntervalsActivity, IntervalsWellness } from '@/types';
 import type { Prisma } from '@prisma/client';
 
 import { getSession } from '@/lib/auth';
@@ -17,6 +18,24 @@ function getNextMonday() {
   const nextMonday = new Date(d.setDate(diff));
   nextMonday.setHours(0, 0, 0, 0);
   return nextMonday;
+}
+
+function normalizeProgramWellness(source: WellnessData): IntervalsWellness {
+  const wellness: IntervalsWellness = {};
+
+  if (source.id !== undefined) wellness.id = source.id;
+  if (source.bodyBattery != null) wellness.bodyBattery = source.bodyBattery;
+  if (source.sleepScore != null) wellness.sleepScore = source.sleepScore;
+  if (source.hrv != null) wellness.hrv = source.hrv;
+  if (source.restingHR != null) wellness.restingHR = source.restingHR;
+  if (source.vo2max != null) wellness.vo2max = source.vo2max;
+  if (source.ctl != null) wellness.ctl = source.ctl;
+  if (source.atl != null) wellness.atl = source.atl;
+  if (source.tsb != null) wellness.tsb = source.tsb;
+  if (source.sleepSecs != null) wellness.sleepSecs = source.sleepSecs;
+  if (source.rampRate != null) wellness.ramp_rate = source.rampRate;
+
+  return wellness;
 }
 
 export async function generateProgramAction(preferences: {
@@ -33,11 +52,11 @@ export async function generateProgramAction(preferences: {
   if (!sessionUser) throw new Error('User not found');
 
   // 2. Fetch Context
-  let wellness = { id: 'unknown', bodyBattery: 80, sleepScore: 80 };
+  let wellness: IntervalsWellness = {};
   if (sessionUser.intervalsApiKey && sessionUser.intervalsAthleteId) {
     const today = new Date().toISOString().split('T')[0];
     const w = await getWellness(today, sessionUser.intervalsApiKey, sessionUser.intervalsAthleteId);
-    if (w) wellness = w as typeof wellness;
+    if (w && !Array.isArray(w)) wellness = normalizeProgramWellness(w);
   }
 
   // 3. Fetch real TTB Analysis
@@ -54,32 +73,19 @@ export async function generateProgramAction(preferences: {
     }),
   ]);
 
-  // Map Prisma logs to Analytics format
-  const history = dbLogs.map((log) => {
-    const sets = (log.sets as { weight?: number; reps?: number; rpe?: number }[]) || [];
-    const bestE1rm =
-      sets.length > 0
-        ? Math.max(...sets.map((s) => (s.weight || 0) * (1 + (s.reps || 0) / 30)))
-        : 0;
-    const avgRpe =
-      sets.length > 0 ? sets.reduce((acc, s) => acc + (s.rpe || 7), 0) / sets.length : 7;
-    return {
-      date: log.date.toISOString(),
-      exerciseId: log.exerciseId,
-      e1rm: bestE1rm,
-      rpe: avgRpe,
-      isEpic: log.isPersonalRecord,
-    };
-  });
+  const history = dbLogs.map((log) => ({
+    date: log.date.toISOString(),
+    isEpic: log.isPersonalRecord,
+  }));
 
-  const activities = dbCardio.map((c) => ({
-    icu_intensity: c.load, // Using load as intensity proxy for simple TTB
+  const activities: IntervalsActivity[] = dbCardio.map((c) => ({
     moving_time: c.duration,
     type: c.type,
     start_date_local: c.date.toISOString(),
+    ...(c.averageHr != null ? { icu_intensity: c.averageHr > 160 ? 90 : 60 } : {}),
   }));
 
-  const ttb = AnalyticsService.calculateTTB(history, activities as any, wellness);
+  const ttb = AnalyticsService.calculateTTB(history, activities, wellness);
 
   // 4. Fetch Capabilities & Status
   const [capabilities, titan] = await Promise.all([

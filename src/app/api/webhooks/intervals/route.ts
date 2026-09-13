@@ -72,12 +72,14 @@ export async function POST(request: NextRequest) {
     ].includes(activity.type);
 
     if (isCardio) {
+      const trainingLoad = activity.training_load ?? null;
+
       await prisma.cardioLog.upsert({
         where: { intervalsId: String(activity.id) },
         update: {
           type: activity.type,
           duration: activity.moving_time,
-          load: activity.training_load || 0,
+          load: trainingLoad,
           averageHr: activity.average_heartrate,
           date: new Date(activity.start_date_local),
         },
@@ -86,7 +88,7 @@ export async function POST(request: NextRequest) {
           userId: user.id,
           type: activity.type,
           duration: activity.moving_time,
-          load: activity.training_load || 0,
+          load: trainingLoad,
           averageHr: activity.average_heartrate,
           date: new Date(activity.start_date_local),
         },

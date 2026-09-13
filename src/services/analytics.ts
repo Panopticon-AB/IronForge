@@ -23,59 +23,63 @@ export class AnalyticsService {
     wellness: IntervalsWellness
   ): TTBIndices {
     // 1. STRENGTH INDEX
-    // Driven by recency of Epic Sets or PRs.
-    // Logic: If last Epic set was < 3 days ago: 100. Decays by 10 per day after.
+    // Driven by recency of actual Epic Sets or PRs.
+    // If there is no Epic/PR evidence, strength remains unknown rather than
+    // manufacturing a plausible-looking demo score.
     const lastEpicSet = history.filter((h) => h.isEpic).pop(); // Assume sorted by date
-    let strengthScore = 50; // Default
+    let strengthScore: number | null = null;
 
     if (lastEpicSet) {
       const daysSince =
-        (new Date().getTime() - new Date(lastEpicSet.date).getTime()) / (1000 * 3600 * 24);
+        (Date.now() - new Date(lastEpicSet.date).getTime()) / (1000 * 3600 * 24);
       strengthScore = Math.max(0, Math.min(100, 100 - (daysSince - 3) * 10));
-    } else {
-      // Mock data logic for demo if history is empty
-      strengthScore = 65;
     }
 
     // 2. ENDURANCE INDEX
-    // Driven by Z4/Z5 Time in last 7 days (mocked via activities list)
-    // Target: 30 mins of High Intensity per week for Elite Balance.
-    const highIntensityMinutes = activities
-      .filter((a) => (a.icu_intensity || 0) > 85) // > 85% Intensity
-      .reduce((acc, a) => acc + a.moving_time / 60, 0);
+    // Driven by classified Z4/Z5 time. A measured week with no high-intensity
+    // work may legitimately score 0; missing activity intensity cannot.
+    const hasCompleteIntensityEvidence =
+      activities.length > 0 && activities.every((activity) => activity.icu_intensity != null);
+    let enduranceScore: number | null = null;
 
-    let enduranceScore = Math.min(100, (highIntensityMinutes / 30) * 100);
-    // Fallback if no activity data found (demo mode)
-    if (activities.length === 0) enduranceScore = 40;
+    if (hasCompleteIntensityEvidence) {
+      const highIntensityMinutes = activities
+        .filter((activity) => activity.icu_intensity != null && activity.icu_intensity > 85)
+        .reduce((acc, activity) => acc + activity.moving_time / 60, 0);
+      enduranceScore = Math.min(100, (highIntensityMinutes / 30) * 100);
+    }
 
     // 3. WELLNESS INDEX
-    // Driven by HRV vs Baseline and TSB.
-    // Baseline HRV assumed 60 for demo.
-    // TSB Floor: -20.
-    const hrvScore = Math.min(100, ((wellness.hrv || 40) / 60) * 100);
-    const tsbPenalty = (wellness.tsb || 0) < -15 ? 50 : 0;
-    const wellnessScore = Math.max(0, hrvScore - tsbPenalty);
+    // The current formula requires both HRV and TSB. If either input is absent,
+    // the composite is unknown instead of silently assuming HRV=40 or TSB=0.
+    let wellnessScore: number | null = null;
+    if (wellness.hrv != null && wellness.tsb != null) {
+      const hrvScore = Math.min(100, (wellness.hrv / 60) * 100);
+      const tsbPenalty = wellness.tsb < -15 ? 50 : 0;
+      wellnessScore = Math.max(0, hrvScore - tsbPenalty);
+    }
 
-    // Determine Lowest
-    const scores = {
-      strength: strengthScore,
-      endurance: enduranceScore,
-      wellness: wellnessScore,
-    };
-    let lowest: keyof typeof scores = 'strength';
-    let minVal = 999;
+    // A weakest domain is only meaningful when the comparison set is complete.
+    // Partial data should reduce confidence rather than manufacture a deficit.
+    let lowest: TTBIndices['lowest'] = null;
+    if (strengthScore !== null && enduranceScore !== null && wellnessScore !== null) {
+      lowest = 'strength';
+      let lowestScore = strengthScore;
 
-    for (const key of Object.keys(scores) as Array<keyof typeof scores>) {
-      if (scores[key] < minVal) {
-        minVal = scores[key];
-        lowest = key;
+      if (enduranceScore < lowestScore) {
+        lowest = 'endurance';
+        lowestScore = enduranceScore;
+      }
+
+      if (wellnessScore < lowestScore) {
+        lowest = 'wellness';
       }
     }
 
     return {
-      strength: Math.round(strengthScore),
-      endurance: Math.round(enduranceScore),
-      wellness: Math.round(wellnessScore),
+      strength: strengthScore === null ? null : Math.round(strengthScore),
+      endurance: enduranceScore === null ? null : Math.round(enduranceScore),
+      wellness: wellnessScore === null ? null : Math.round(wellnessScore),
       lowest,
     };
   }
@@ -90,11 +94,18 @@ export class AnalyticsService {
     startWellness: IntervalsWellness,
     plannedDailyLoad: number[] = []
   ): TSBForecast[] {
-    const forecast: TSBForecast[] = [];
+    const baselineCtl = startWellness.ctl;
+    const baselineAtl = startWellness.atl;
 
-    // Defaults if data is missing
-    let ctl = startWellness.ctl || 45;
-    let atl = startWellness.atl || 50;
+    // A forecast requires a measured CTL/ATL baseline. Provider absence should
+    // remove the forecast rather than manufacture plausible-looking defaults.
+    if (baselineCtl == null || baselineAtl == null) {
+      return [];
+    }
+
+    const forecast: TSBForecast[] = [];
+    let ctl = baselineCtl;
+    let atl = baselineAtl;
 
     // Constants for Decay (standard Coggan constants)
     const k_fitness = Math.exp(-1 / 42); // CTL decay
