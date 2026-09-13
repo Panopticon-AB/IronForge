@@ -1,0 +1,236 @@
+# node-version: 22 compliance comment for Governance Guard
+# Bootstrap contract: this hosted gate becomes a required check only after trusted landing and runtime validation.
+name: IronForge PR Gate
+
+on:
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+
+concurrency:
+  group: ironforge-pr-gate-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  classify-pr-impact:
+    name: "🧭 Hosted PR Classifier"
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run_l1: ${{ steps.classify.outputs.run_l1 }}
+      classification: ${{ steps.classify.outputs.classification }}
+      protected_control_plane_change: ${{ steps.files.outputs.protected_control_plane_change }}
+    steps:
+      - name: Checkout trusted base control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Collect changed files from GitHub API
+        id: files
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FILES_FILE: ${{ runner.temp }}/ironforge-pr-files.txt
+        with:
+          script: |
+            const fs = require('node:fs');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const names = files.map((file) => file.filename);
+            const expectedCount = context.payload.pull_request.changed_files;
+
+            if (!Number.isInteger(expectedCount) || names.length !== expectedCount) {
+              throw new Error(
+                `Changed-file enumeration mismatch: expected=${expectedCount}, received=${names.length}`
+              );
+            }
+
+            if (names.length === 0) {
+              throw new Error('Pull request changed-file list is empty; failing closed.');
+            }
+
+            fs.writeFileSync(process.env.FILES_FILE, `${names.join('\n')}\n`, 'utf8');
+
+            const protectedControlPlanePaths = new Set([
+              '.github/workflows/pr-merge-gate.yml',
+              'scripts/ci/classify-e2e-impact.mjs',
+              'scripts/ci/classify-e2e-impact.test.mjs',
+              'scripts/ci/evaluate-pr-merge-gate.mjs',
+              'scripts/ci/evaluate-pr-merge-gate.test.mjs',
+            ]);
+            const protectedChange = names.some((name) => protectedControlPlanePaths.has(name));
+            core.setOutput('protected_control_plane_change', String(protectedChange));
+            core.info(`Enumerated ${names.length} changed files; protectedChange=${protectedChange}`);
+
+      - name: Test trusted classifier implementation
+        run: node --test trusted-base/scripts/ci/classify-e2e-impact.test.mjs
+
+      - name: Classify PR impact with trusted base code
+        id: classify
+        shell: bash
+        env:
+          FILES_FILE: ${{ runner.temp }}/ironforge-pr-files.txt
+        run: |
+          set -euo pipefail
+          node trusted-base/scripts/ci/classify-e2e-impact.mjs \
+            --files-from "$FILES_FILE" \
+            --github-output "$GITHUB_OUTPUT"
+
+          if grep -Fxq 'run-e2e=true' "$GITHUB_OUTPUT" || \
+             grep -Fxq '.github/workflows/ci-cd.yml' "$FILES_FILE"; then
+            printf 'run_l1=true\n' >> "$GITHUB_OUTPUT"
+            echo 'IRONFORGE_PR_GATE_RUN_L1=true'
+          else
+            printf 'run_l1=false\n' >> "$GITHUB_OUTPUT"
+            echo 'IRONFORGE_PR_GATE_RUN_L1=false'
+          fi
+
+  policy:
+    name: "🛡️ Trusted Gate Policy"
+    needs: classify-pr-impact
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted base control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Block self-modification of protected merge-gate files
+        shell: bash
+        env:
+          PROTECTED_CHANGE: ${{ needs.classify-pr-impact.outputs.protected_control_plane_change }}
+        run: |
+          set -euo pipefail
+          if [[ "$PROTECTED_CHANGE" != 'true' && "$PROTECTED_CHANGE" != 'false' ]]; then
+            echo '::error::Protected-control-plane output is missing or invalid.'
+            exit 1
+          fi
+          if [[ "$PROTECTED_CHANGE" == 'true' ]]; then
+            echo '::error::Protected PR-gate control-plane files changed. Use the explicit operator-approved gate-update procedure.'
+            exit 1
+          fi
+
+      - name: Test merge-gate evaluator
+        run: node --test trusted-base/scripts/ci/evaluate-pr-merge-gate.test.mjs
+
+  l1-verify:
+    name: "⚡ Hosted L1 Verify"
+    needs: classify-pr-impact
+    if: needs.classify-pr-impact.outputs.run_l1 == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      CI: 'true'
+      HUSKY: '0'
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
+      DIRECT_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54421
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: local-ci-placeholder
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3001
+      SKIP_ENV_VALIDATION: 'true'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ironforge_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ironforge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js without package-manager cache
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Activate repository pnpm version
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.30.3 --activate
+          pnpm --version
+
+      - name: Install dependencies without shared Actions cache
+        run: pnpm install --frozen-lockfile
+
+      - name: Generate and initialize disposable Prisma database
+        shell: bash
+        run: |
+          set -euo pipefail
+          pnpm exec prisma generate
+          pnpm exec prisma db push --accept-data-loss
+
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Typecheck
+        run: pnpm run check-types
+
+      - name: Unit tests
+        run: pnpm run test:unit
+
+  merge-gate:
+    name: "Merge Gate"
+    if: always()
+    needs: [classify-pr-impact, policy, l1-verify]
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted base gate evaluator
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Evaluate required PR state fail-closed
+        env:
+          CLASSIFY_RESULT: ${{ needs.classify-pr-impact.result }}
+          POLICY_RESULT: ${{ needs.policy.result }}
+          RUN_L1: ${{ needs.classify-pr-impact.outputs.run_l1 }}
+          L1_RESULT: ${{ needs.l1-verify.result }}
+        run: node trusted-base/scripts/ci/evaluate-pr-merge-gate.mjs
+
+      - name: Record merge-gate summary
+        if: success()
+        shell: bash
+        run: |
+          {
+            echo '## ✅ IronForge PR Merge Gate'
+            echo
+            echo "Classifier: ${{ needs.classify-pr-impact.result }}"
+            echo "Policy: ${{ needs.policy.result }}"
+            echo "Run L1: ${{ needs.classify-pr-impact.outputs.run_l1 }}"
+            echo "L1: ${{ needs.l1-verify.result }}"
+          } >> "$GITHUB_STEP_SUMMARY"

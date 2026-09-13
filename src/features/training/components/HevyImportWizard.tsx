@@ -14,16 +14,25 @@ interface HevyImportWizardProps {
 
 type Step = 'INTRO' | 'UPLOAD' | 'PARSING' | 'CONFIRM' | 'IMPORTING' | 'DONE';
 
+type ImportSummary = {
+  importedWorkouts: number;
+  duplicateWorkouts: number;
+  unidentifiedWorkouts: number;
+  logs: number;
+};
+
 export const HevyImportWizard: React.FC<HevyImportWizardProps> = ({ isOpen, onClose }) => {
   const [step, setStep] = useState<Step>('INTRO');
   const [, setFile] = useState<File | null>(null);
   const [stats, setStats] = useState<any>(null);
   const [workoutsToImport, setWorkoutsToImport] = useState<any[]>([]);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
 
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const selectedFile = e.target.files?.[0];
     if (selectedFile) {
       setFile(selectedFile);
+      setImportSummary(null);
       setStep('PARSING');
 
       const reader = new FileReader();
@@ -75,7 +84,15 @@ export const HevyImportWizard: React.FC<HevyImportWizardProps> = ({ isOpen, onCl
     try {
       const result = await importHevyHistoryAction(workoutsToImport);
       if (result.success) {
-        toast.success(`Successfully imported ${result.logs} logs!`);
+        setImportSummary({
+          importedWorkouts: result.importedWorkouts,
+          duplicateWorkouts: result.duplicateWorkouts,
+          unidentifiedWorkouts: result.unidentifiedWorkouts,
+          logs: result.logs,
+        });
+        toast.success(
+          `Imported ${result.importedWorkouts} workouts; ${result.duplicateWorkouts} already present.`,
+        );
         setStep('DONE');
       } else {
         toast.error('Import failed.');
@@ -124,8 +141,8 @@ export const HevyImportWizard: React.FC<HevyImportWizardProps> = ({ isOpen, onCl
                 className="text-center space-y-6"
               >
                 <p className="text-zinc-300">
-                  Transfer your Hevy workout history to IronForge. Your PRs, volume, and exercise
-                  data will be merged.
+                  Transfer your Hevy workout history to IronForge. Identified workouts are matched by
+                  their Hevy workout ID before legacy training logs are written.
                 </p>
                 <div className="bg-orange-900/10 border border-orange-800/30 p-4 rounded-lg text-left text-sm">
                   <h4 className="text-orange-400 font-bold mb-2">How to Export from Hevy:</h4>
@@ -137,7 +154,10 @@ export const HevyImportWizard: React.FC<HevyImportWizardProps> = ({ isOpen, onCl
                   </ol>
                 </div>
                 <button
-                  onClick={() => setStep('UPLOAD')}
+                  onClick={() => {
+                    setImportSummary(null);
+                    setStep('UPLOAD');
+                  }}
                   className="w-full py-4 bg-orange-600 text-white font-bold rounded-lg hover:bg-orange-500 flex items-center justify-center gap-2"
                 >
                   Get Started <ArrowRight className="w-4 h-4" />
@@ -237,10 +257,42 @@ export const HevyImportWizard: React.FC<HevyImportWizardProps> = ({ isOpen, onCl
                 <div className="w-16 h-16 bg-green-900/30 rounded-full flex items-center justify-center mx-auto border-2 border-green-700">
                   <CheckCircle className="w-8 h-8 text-green-500" />
                 </div>
-                <h3 className="text-xl font-bold text-white">Import Successful!</h3>
-                <p className="text-zinc-400 text-sm">
-                  Your history has been merged. Welcome to IronForge, Titan.
-                </p>
+                <h3 className="text-xl font-bold text-white">Import Complete</h3>
+                {importSummary ? (
+                  <>
+                    <div className="grid grid-cols-3 gap-3 text-left">
+                      <div className="bg-zinc-800 p-3 rounded-lg">
+                        <div className="text-xl font-bold text-white">
+                          {importSummary.importedWorkouts}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 uppercase">Imported</div>
+                      </div>
+                      <div className="bg-zinc-800 p-3 rounded-lg">
+                        <div className="text-xl font-bold text-white">
+                          {importSummary.duplicateWorkouts}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 uppercase">Already present</div>
+                      </div>
+                      <div className="bg-zinc-800 p-3 rounded-lg">
+                        <div className="text-xl font-bold text-yellow-400">
+                          {importSummary.unidentifiedWorkouts}
+                        </div>
+                        <div className="text-[10px] text-zinc-500 uppercase">Missing Hevy ID</div>
+                      </div>
+                    </div>
+                    <p className="text-zinc-400 text-sm">
+                      {importSummary.logs} exercise logs were written.
+                    </p>
+                    {importSummary.unidentifiedWorkouts > 0 && (
+                      <p className="text-yellow-300/80 text-xs">
+                        Missing-ID workouts are already included in Imported. They used the legacy
+                        fallback and did not receive exact provider-ID deduplication.
+                      </p>
+                    )}
+                  </>
+                ) : (
+                  <p className="text-zinc-400 text-sm">Your workout history has been imported.</p>
+                )}
                 <button
                   onClick={onClose}
                   className="mt-4 px-6 py-3 bg-zinc-700 text-white font-bold rounded-lg hover:bg-zinc-600"

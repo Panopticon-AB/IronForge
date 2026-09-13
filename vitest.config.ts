@@ -23,6 +23,7 @@ export default defineConfig({
       '**/build/**',
       '**/dist/**',
       '**/tmp/**',
+      'scripts/ci/**/*.test.mjs',
     ],
 
     setupFiles: ['./vitest.setup.ts'],

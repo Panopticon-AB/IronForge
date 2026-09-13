@@ -19,15 +19,54 @@ const TTBCompass: React.FC<TTBCompassProps> = ({ indices }) => {
     return { x, y };
   };
 
-  const pWellness = getCoords(-90, indices.wellness);
-  const pStrength = getCoords(30, indices.strength);
-  const pEndurance = getCoords(150, indices.endurance);
+  const wellnessScore = indices.wellness;
+  const strengthScore = indices.strength;
+  const enduranceScore = indices.endurance;
+
+  if (wellnessScore === null || strengthScore === null || enduranceScore === null) {
+    const scoreRows = [
+      ['WEL', wellnessScore],
+      ['STR', strengthScore],
+      ['END', enduranceScore],
+    ] as const;
+
+    return (
+      <div className="bg-armor border-2 border-clay/30 rounded-lg shadow-2xl relative overflow-hidden group p-4">
+        <div className="absolute inset-0 bg-[url('https://www.transparenttextures.com/patterns/dark-matter.png')] opacity-10" />
+        <div className="relative z-10">
+          <div className="flex justify-between items-baseline mb-3">
+            <h3 className="font-serif text-sm uppercase tracking-widest text-clay">Sys. Vitality</h3>
+            <span className="text-xs font-mono bg-void text-cyan px-2 py-1 rounded shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+              PARTIAL DATA
+            </span>
+          </div>
+
+          <div className="grid grid-cols-3 gap-2 text-center mb-3">
+            {scoreRows.map(([label, score]) => (
+              <div key={label} className="bg-void/40 border border-steel/20 rounded p-2">
+                <div className="text-[10px] font-serif text-steel">{label}</div>
+                <div className="font-mono text-sm text-clay">{score === null ? '—' : score}</div>
+              </div>
+            ))}
+          </div>
+
+          <p className="text-[10px] leading-relaxed text-steel">
+            Insufficient TTB evidence. Unknown scores are not plotted as zero.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  const pWellness = getCoords(-90, wellnessScore);
+  const pStrength = getCoords(30, strengthScore);
+  const pEndurance = getCoords(150, enduranceScore);
 
   const maxWellness = getCoords(-90, 100);
   const maxStrength = getCoords(30, 100);
   const maxEndurance = getCoords(150, 100);
 
-  const healthPercentage = indices.wellness;
+  const healthPercentage = wellnessScore;
   const healthStatus =
     healthPercentage > 85
       ? 'FRESH'
@@ -55,6 +94,7 @@ const TTBCompass: React.FC<TTBCompassProps> = ({ indices }) => {
               viewBox={`0 0 ${size} ${size}`}
               className="w-full h-full drop-shadow-2xl overflow-visible"
             >
+              <title>Total Training Balance radar</title>
               <defs>
                 <radialGradient id="radarGradient" cx="50%" cy="50%" r="50%" fx="50%" fy="50%">
                   <stop offset="0%" stopColor="var(--color-gold)" stopOpacity="0.1" />

@@ -69,7 +69,7 @@ jobs:
        github.event.pull_request.head.repo.full_name == github.repository) ||
       github.event_name == 'workflow_dispatch' ||
       startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     env:
       DATABASE_URL: ''
@@ -339,16 +339,16 @@ jobs:
           }
 
   # 🎭 E2E VERIFICATION
+  # Full credential-backed E2E is trusted post-merge only. PR validation happens in
+  # pr-public-smoke.yml using base-controlled workflow code and no repository secrets.
   e2e:
     name: 🎭 E2E Tests
-    needs: [classify-pr-impact, l1-verify]
-    if: >-
-      (github.event_name == 'pull_request' || github.event_name == 'workflow_dispatch') &&
-      github.actor != 'dependabot[bot]' &&
-      needs.classify-pr-impact.outputs.run-e2e == 'true'
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Target specific local runner
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, linux, panopticon, ci, small] # Trusted post-merge lane only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
       - uses: ./.github/actions/setup-ironforge
         with:
           tier: 'e2e'

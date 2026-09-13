@@ -4,6 +4,8 @@ on:
   pull_request:
     paths:
       - '.github/workflows/**'
+      - 'scripts/ci/pr-e2e-trust-boundary.test.mjs'
+      - 'playwright.config.ts'
   workflow_dispatch:
 
 permissions:
@@ -15,12 +17,15 @@ jobs:
     if: >-
       github.event_name != 'pull_request' ||
       github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+
+      - name: Verify PR E2E trust boundary
+        run: node --test scripts/ci/pr-e2e-trust-boundary.test.mjs
 
       - name: Check Node and pnpm Versions
         shell: bash
@@ -30,7 +35,7 @@ jobs:
 
           for file in .github/workflows/*.yml; do
             # Skip itself and specialized workflows that don't use Node standard runners.
-            if [[ "$file" == *"/governance-guard.yml" || "$file" == *"/labeler.yml" || "$file" == *"/release-drafter.yml" || "$file" == *"/stale.yml" || "$file" == *"/scorecard.yml" || "$file" == *"/project-automation.yml" || "$file" == *"/dependabot-auto-merge.yml" || "$file" == *"/runner-heartbeat.yml" ]]; then continue; fi
+            if [[ "$file" == *"/governance-guard.yml" || "$file" == *"/labeler.yml" || "$file" == *"/release-drafter.yml" || "$file" == *"/stale.yml" || "$file" == *"/scorecard.yml" || "$file" == *"/project-automation.yml" || "$file" == *"/dependabot-auto-merge.yml" || "$file" == *"/runner-heartbeat.yml" || "$file" == *"/ethicalcheck.yml" ]]; then continue; fi
 
             echo "Auditing $file..."
 

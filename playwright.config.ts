@@ -10,7 +10,10 @@ const __dirname = path.dirname(__filename);
 dotenv.config({ path: path.resolve(__dirname, '.env') });
 
 export default defineConfig({
-  globalSetup: './tests/e2e/setup/e2e-seed.ts',
+  globalSetup:
+    process.env.IRONFORGE_E2E_SKIP_GLOBAL_SETUP === 'true'
+      ? undefined
+      : './tests/e2e/setup/e2e-seed.ts',
   testDir: './tests/e2e',
   timeout: 120000,
   /* Run tests in files in parallel */

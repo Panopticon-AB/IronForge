@@ -8,6 +8,20 @@ import React, { useCallback, useState } from 'react';
 import { useDropzone } from 'react-dropzone';
 import { toast } from 'sonner';
 
+type ImportSummary = {
+  importedWorkouts: number;
+  duplicateWorkouts: number;
+  unidentifiedWorkouts: number;
+  logs: number;
+};
+
+const EMPTY_IMPORT_SUMMARY: ImportSummary = {
+  importedWorkouts: 0,
+  duplicateWorkouts: 0,
+  unidentifiedWorkouts: 0,
+  logs: 0,
+};
+
 export const HevyImportWizard = () => {
   const [file, setFile] = useState<File | null>(null);
   const [stats, setStats] = useState<{
@@ -17,6 +31,7 @@ export const HevyImportWizard = () => {
   const [parsedData, setParsedData] = useState<any[] | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [complete, setComplete] = useState(false);
+  const [importSummary, setImportSummary] = useState<ImportSummary | null>(null);
 
   const onDrop = useCallback((acceptedFiles: File[]) => {
     const selected = acceptedFiles[0];
@@ -37,6 +52,7 @@ export const HevyImportWizard = () => {
 
         setFile(selected);
         setParsedData(workouts);
+        setImportSummary(null);
 
         // Calculate stats
         const count = workouts.length;
@@ -63,23 +79,27 @@ export const HevyImportWizard = () => {
     setIsUploading(true);
 
     try {
-      // Chunking if necessary? For now send all
-      // If huge, we might need to chunk. Let's send in batches of 50.
       const BATCH_SIZE = 50;
       const batches = [];
       for (let i = 0; i < parsedData.length; i += BATCH_SIZE) {
         batches.push(parsedData.slice(i, i + BATCH_SIZE));
       }
 
-      let totalImported = 0;
+      const summary = { ...EMPTY_IMPORT_SUMMARY };
 
       for (const batch of batches) {
-        await importHevyHistoryAction(batch);
-        totalImported += batch.length;
+        const result = await importHevyHistoryAction(batch);
+        summary.importedWorkouts += result.importedWorkouts;
+        summary.duplicateWorkouts += result.duplicateWorkouts;
+        summary.unidentifiedWorkouts += result.unidentifiedWorkouts;
+        summary.logs += result.logs;
       }
 
+      setImportSummary(summary);
       setComplete(true);
-      toast.success(`Successfully imported ${totalImported} workouts!`);
+      toast.success(
+        `Imported ${summary.importedWorkouts} workouts; ${summary.duplicateWorkouts} already present.`,
+      );
     } catch (e) {
       toast.error(`Import failed: ${getErrorMessage(e)}`);
     } finally {
@@ -98,13 +118,47 @@ export const HevyImportWizard = () => {
           <CheckCircle className="w-8 h-8 text-emerald-500" />
         </motion.div>
         <h3 className="text-xl font-bold text-white mb-2">Import Complete!</h3>
-        <p className="text-zinc-400 mb-6">
-          Your legendary history has been inscribed in the archives.
-        </p>
+        {importSummary ? (
+          <>
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 my-6 text-left">
+              <div className="p-3 bg-black/20 rounded-lg">
+                <div className="text-xs text-zinc-500 uppercase">Imported</div>
+                <div className="text-2xl font-bold text-white">
+                  {importSummary.importedWorkouts}
+                </div>
+              </div>
+              <div className="p-3 bg-black/20 rounded-lg">
+                <div className="text-xs text-zinc-500 uppercase">Already present</div>
+                <div className="text-2xl font-bold text-white">
+                  {importSummary.duplicateWorkouts}
+                </div>
+              </div>
+              <div className="p-3 bg-black/20 rounded-lg">
+                <div className="text-xs text-zinc-500 uppercase">Missing Hevy ID</div>
+                <div className="text-2xl font-bold text-yellow-400">
+                  {importSummary.unidentifiedWorkouts}
+                </div>
+              </div>
+            </div>
+            <p className="text-sm text-zinc-400 mb-2">
+              {importSummary.logs} exercise logs were written.
+            </p>
+            {importSummary.unidentifiedWorkouts > 0 && (
+              <p className="text-xs text-yellow-300/80 mb-6">
+                Missing-ID workouts are included in Imported and used the legacy fallback. They did
+                not receive exact provider-ID deduplication.
+              </p>
+            )}
+          </>
+        ) : (
+          <p className="text-zinc-400 mb-6">Your workout history has been imported.</p>
+        )}
         <button
           onClick={() => {
             setFile(null);
             setStats(null);
+            setParsedData(null);
+            setImportSummary(null);
             setComplete(false);
           }}
           className="text-sm text-emerald-400 hover:text-emerald-300 underline"
@@ -147,6 +201,8 @@ export const HevyImportWizard = () => {
               onClick={() => {
                 setFile(null);
                 setStats(null);
+                setParsedData(null);
+                setImportSummary(null);
               }}
               className="ml-auto text-xs text-red-400 hover:text-red-300"
             >
@@ -170,8 +226,8 @@ export const HevyImportWizard = () => {
           <div className="bg-yellow-500/10 border border-yellow-500/20 p-4 rounded-lg flex items-start gap-3 mb-6">
             <AlertCircle className="w-5 h-5 text-yellow-500 shrink-0 mt-0.5" />
             <div className="text-sm text-yellow-200/80">
-              Missing exercises will be automatically created. Duplicates will be skipped based on
-              date and exercise.
+              Identified Hevy workouts are deduplicated by Hevy workout ID. Workouts missing that ID
+              use a legacy fallback and are reported separately after import.
             </div>
           </div>
 
