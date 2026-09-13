@@ -1,5 +1,9 @@
 'use server';
 
+import {
+  buildChatTrainingContext,
+  type ChatTrainingContext,
+} from '@/features/training-context/chatTrainingContext';
 import { getErrorMessage } from '@/lib/error-message';
 import { getActivities, getAthleteSettings, getEvents, getWellness } from '@/lib/intervals';
 import prisma from '@/lib/prisma';
@@ -29,6 +33,35 @@ async function getIntervalsCredentials() {
     apiKey: dbUser.intervalsApiKey,
     athleteId: dbUser.intervalsAthleteId,
   };
+}
+
+export async function getChatTrainingContextAction(): Promise<ChatTrainingContext> {
+  const asOf = new Date();
+
+  try {
+    const { apiKey, athleteId } = await getIntervalsCredentials();
+    const endDate = asOf.toISOString().slice(0, 10);
+    const wellnessStartDate = new Date(asOf.getTime() - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const activityStartDate = new Date(asOf.getTime() - 72 * 3_600_000)
+      .toISOString()
+      .slice(0, 10);
+
+    const [wellnessResult, activities] = await Promise.all([
+      getWellness(wellnessStartDate, apiKey, athleteId, endDate),
+      getActivities(activityStartDate, endDate, apiKey, athleteId),
+    ]);
+
+    const wellness = Array.isArray(wellnessResult)
+      ? [...wellnessResult].sort((a, b) => b.date.localeCompare(a.date))[0]
+      : (wellnessResult ?? undefined);
+
+    return buildChatTrainingContext({ wellness, activities, asOf });
+  } catch (error) {
+    console.warn('Server Action Chat Training Context Error:', getErrorMessage(error));
+    return buildChatTrainingContext({ wellness: undefined, activities: [], asOf });
+  }
 }
 
 export async function getWellnessAction(date: string): Promise<IntervalsWellness> {

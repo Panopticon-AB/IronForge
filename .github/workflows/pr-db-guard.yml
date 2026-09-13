@@ -1,0 +1,226 @@
+name: IronForge PR DB Guard
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - '.github/workflows/pr-db-guard.yml'
+      - 'scripts/ci/classify-db-guard-impact.mjs'
+      - 'scripts/ci/classify-db-guard-impact.test.mjs'
+      - 'scripts/ci/evaluate-prisma-drift-delta.mjs'
+      - 'scripts/ci/evaluate-prisma-drift-delta.test.mjs'
+  pull_request_target:
+    types: [opened, synchronize, reopened, ready_for_review]
+    branches: [main]
+    paths:
+      - 'prisma/schema.prisma'
+      - 'prisma/migrations/**'
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  classifier-self-test:
+    name: "🧪 DB Guard control-plane self-test"
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
+          persist-credentials: false
+      - name: Test DB Guard control plane
+        run: >-
+          node --test
+          scripts/ci/classify-db-guard-impact.test.mjs
+          scripts/ci/evaluate-prisma-drift-delta.test.mjs
+
+  classify-db-impact:
+    name: "🧭 Trusted DB impact classifier"
+    if: github.event_name == 'pull_request_target'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      run-db-guard: ${{ steps.classify.outputs.run-db-guard }}
+      classification: ${{ steps.classify.outputs.classification }}
+    steps:
+      - name: Checkout trusted base control plane
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Collect changed files from GitHub API
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          FILES_FILE: ${{ runner.temp }}/ironforge-db-impact-files.txt
+        with:
+          script: |
+            const fs = require('node:fs');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const names = files.map((file) => file.filename);
+            const expectedCount = context.payload.pull_request.changed_files;
+
+            if (!Number.isInteger(expectedCount) || names.length !== expectedCount) {
+              throw new Error(
+                `Changed-file enumeration mismatch: expected=${expectedCount}, received=${names.length}`
+              );
+            }
+            if (names.length === 0) {
+              throw new Error('Pull request changed-file list is empty; failing closed.');
+            }
+
+            fs.writeFileSync(process.env.FILES_FILE, `${names.join('\n')}\n`, 'utf8');
+
+      - name: Test trusted DB classifier
+        run: node --test trusted-base/scripts/ci/classify-db-guard-impact.test.mjs
+
+      - name: Classify DB impact with trusted base code
+        id: classify
+        env:
+          FILES_FILE: ${{ runner.temp }}/ironforge-db-impact-files.txt
+        run: >-
+          node trusted-base/scripts/ci/classify-db-guard-impact.mjs
+          --files-from "$FILES_FILE"
+          --github-output "$GITHUB_OUTPUT"
+
+      - name: Require DB Guard for Prisma-triggered event
+        shell: bash
+        env:
+          RUN_DB_GUARD: ${{ steps.classify.outputs.run-db-guard }}
+        run: |
+          set -euo pipefail
+          if [[ "$RUN_DB_GUARD" != 'true' ]]; then
+            echo '::error::Prisma path triggered trusted DB Guard but classifier did not require it.'
+            exit 1
+          fi
+
+  db-guard:
+    name: "🗄️ PR: DB Guard"
+    needs: classify-db-impact
+    if: >-
+      github.event_name == 'pull_request_target' &&
+      needs.classify-db-impact.outputs.run-db-guard == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      DATABASE_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/ironforge_test?schema=public
+      DIRECT_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/ironforge_test?schema=public
+      ADMIN_DATABASE_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/postgres?schema=public
+      SHADOW_DATABASE_URL: postgresql://postgres:ironforge-ci-local@127.0.0.1:5432/ironforge_shadow_pr_${{ github.event.pull_request.number }}?schema=public
+      TARGET_DB: ironforge_shadow_pr_${{ github.event.pull_request.number }}
+      CI: 'true'
+      HUSKY: '0'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: ironforge-ci-local
+          POSTGRES_DB: ironforge_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ironforge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - name: Checkout trusted base helpers
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          ref: ${{ github.event.pull_request.base.sha }}
+          path: trusted-base
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Setup Node.js without package-manager cache
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e # v6.4.0
+        with:
+          node-version: 22
+          package-manager-cache: false
+
+      - name: Activate repository pnpm version
+        shell: bash
+        run: |
+          set -euo pipefail
+          corepack enable
+          corepack prepare pnpm@10.30.3 --activate
+          pnpm --version
+
+      - name: Install trusted helper dependencies
+        working-directory: trusted-base
+        run: pnpm install --frozen-lockfile --ignore-scripts
+
+      - name: Create run-scoped shadow database with trusted helper
+        working-directory: trusted-base
+        run: pnpm exec tsx scripts/ci/setup-db.ts
+
+      - name: Checkout exact PR head without credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          path: candidate
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Validate candidate schema with trusted Prisma toolchain
+        working-directory: trusted-base
+        run: pnpm exec prisma validate --schema ../candidate/prisma/schema.prisma
+
+      - name: Capture trusted-base and candidate migration drift
+        id: drift
+        shell: bash
+        working-directory: trusted-base
+        env:
+          BASE_DRIFT_FILE: ${{ runner.temp }}/ironforge-base-prisma-drift.sql
+          CANDIDATE_DRIFT_FILE: ${{ runner.temp }}/ironforge-candidate-prisma-drift.sql
+        run: |
+          set -uo pipefail
+
+          set +e
+          pnpm exec prisma migrate diff \
+            --from-migrations prisma/migrations \
+            --to-schema prisma/schema.prisma \
+            --script \
+            --exit-code > "$BASE_DRIFT_FILE"
+          base_status=$?
+
+          pnpm exec prisma migrate diff \
+            --from-migrations ../candidate/prisma/migrations \
+            --to-schema ../candidate/prisma/schema.prisma \
+            --script \
+            --exit-code > "$CANDIDATE_DRIFT_FILE"
+          candidate_status=$?
+          set -e
+
+          printf 'base_status=%s\n' "$base_status" >> "$GITHUB_OUTPUT"
+          printf 'candidate_status=%s\n' "$candidate_status" >> "$GITHUB_OUTPUT"
+
+      - name: Enforce no new Prisma drift relative to trusted base
+        working-directory: trusted-base
+        env:
+          BASE_STATUS: ${{ steps.drift.outputs.base_status }}
+          CANDIDATE_STATUS: ${{ steps.drift.outputs.candidate_status }}
+          BASE_DRIFT_FILE: ${{ runner.temp }}/ironforge-base-prisma-drift.sql
+          CANDIDATE_DRIFT_FILE: ${{ runner.temp }}/ironforge-candidate-prisma-drift.sql
+        run: >-
+          node scripts/ci/evaluate-prisma-drift-delta.mjs
+          --base-status "$BASE_STATUS"
+          --candidate-status "$CANDIDATE_STATUS"
+          --base-file "$BASE_DRIFT_FILE"
+          --candidate-file "$CANDIDATE_DRIFT_FILE"

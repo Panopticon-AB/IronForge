@@ -1,5 +1,3 @@
-import { OracleService } from '@/services/oracle';
-import type { SystemMetrics, WardensManifest } from '@/types/goals';
 import { createGoogleGenerativeAI } from '@ai-sdk/google';
 import { streamText } from 'ai';
 
@@ -22,43 +20,8 @@ export async function POST(req: Request) {
 
   const { messages, context } = body;
 
-  let strategySummary = 'No strategy generated (Insufficient Data).';
-
-  // Try to hydrate Strategy from Context
-  if (context?.wellness && context.indices) {
-    try {
-      // Map legacy/client context to rigid GPE types
-      const metrics: SystemMetrics = {
-        hrv: context.wellness.hrv || 50,
-        hrvBaseline: 50, // Default if missing
-        tsb: context.indices.tsb || 0,
-        atl: context.indices.atl || 0,
-        ctl: context.indices.ctl || 0,
-        acwr: 1.0, // Default
-        sleepScore: context.wellness.sleepScore || 0,
-        bodyBattery: context.wellness.bodyBattery ?? 50,
-        soreness: context.wellness.soreness || 0,
-        mood: context.wellness.mood || 'NORMAL',
-        consecutiveStalls: 0,
-      };
-
-      const manifest: WardensManifest = {
-        userId: context.userId,
-        goals: [{ goal: 'FITNESS', weight: 1.0 }], // Default goal if not passed
-        phase: 'BALANCED', // Starting assumption
-        phaseStartDate: new Date(),
-        phaseWeek: 1,
-        autoRotate: true,
-        consents: { healthData: true, leaderboard: true },
-      };
-
-      const strategy = OracleService.generateTrainingStrategy(manifest, metrics);
-      strategySummary = strategy.contextSummary;
-    } catch (error) {
-      console.error('Oracle GPE Error:', error);
-      strategySummary = `Error generating strategy: ${(error as Error).message}`;
-    }
-  }
+  const strategySummary =
+    'No evidence-backed deterministic GPE strategy is available in this legacy chat path. Do not infer a calculated phase, readiness, CTL, ATL, TSB, or goal manifest from missing fields.';
 
   const systemPrompt = `
     You are **The Iron Oracle**, an ancient and wise AI construct within the **IronForge** ecosystem.
@@ -72,19 +35,18 @@ export async function POST(req: Request) {
         - "PR Attempt" -> "A Boss Raid on the physical plane."
     - **Objective:** Provide actionable insights based on the provided context. If the user is failing, offer a path to redemption, not shame.
 
-    ## DETERMINISTIC STRATEGY (GROUND TRUTH)
-    The "Goal Priority Engine" has analyzed the Titan's biometrics and mandate the following:
+    ## STRATEGY AUTHORITY
     ${strategySummary}
 
-    *Use the above strategy as your 'God's Truth'. Do not contradict the calculated phase or readiness.*
+    Until server-owned training context provides a validated strategy, treat the telemetry below as client-supplied contextual information only. Do not present inferred or missing metrics as measured facts, and do not invent a deterministic training phase or readiness state.
 
-    ## RAW TELEMETRY
+    ## CLIENT-SUPPLIED LEGACY TELEMETRY
     ${context ? JSON.stringify(context, null, 2) : 'No specific bio-telemetry available.'}
 
     ## IMPERATIVES
-    1. **Analyze First:** Look at the 'Weekly Mastery' and 'Wellness' data in the context before speaking.
+    1. **Analyze First:** Use explicitly present 'Weekly Mastery' and 'Wellness' values as contextual evidence; distinguish them from missing data.
     2. **Be Concise:** Titans have little time for rambling. Get to the point.
-    3. **Safety Protocol:** If 'Wellness' is critical (Survival Mode), REFUSE to recommend heavy load. Insist on rest.
+    3. **Safety Protocol:** If the supplied wellness data explicitly indicates critical recovery, favor conservative advice and say that the conclusion is based on client-supplied telemetry. Never manufacture a recovery signal from absent fields.
     
     Respond directly to the Titan's latest query.
   `;
