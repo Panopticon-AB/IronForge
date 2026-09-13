@@ -1,11 +1,10 @@
 # node-version: 22 compliance comment for Governance Guard
 name: "🏷️ PR Labeler"
 
-# Label mutation requires pull-requests: write. Until the dedicated
-# ci-trusted-github-write pool is commissioned, keep the PR signal visible but
-# execute only a read-only deferred marker on the bounded CI runner pool. The
-# same-repository gate prevents fork-controlled workflow code from reaching the
-# self-hosted execution boundary.
+# Label mutation requires pull-requests: write. Until a dedicated trusted-write
+# path is commissioned, keep the signal visible as a GitHub-hosted, read-only
+# deferred marker. PR-triggered workflow code must not execute on persistent
+# Panopticon runners merely to report that mutation is deferred.
 on:
   pull_request:
     types: [opened, synchronize, reopened]
@@ -17,7 +16,7 @@ jobs:
   triage:
     name: "PR labeling deferred (trusted-write required)"
     if: github.event.pull_request.head.repo.full_name == github.repository
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - name: Record deferred label mutation
@@ -26,7 +25,7 @@ jobs:
           {
             echo '## PR labeling deferred'
             echo
-            echo 'Automatic label mutation requires the dedicated ci-trusted-github-write runner profile.'
+            echo 'Automatic label mutation requires a dedicated trusted-write path.'
             echo 'No labels were changed by this read-only PR job.'
           } >> "$GITHUB_STEP_SUMMARY"
           echo 'IRONFORGE_PR_LABELER_STATUS=DEFERRED_TRUSTED_WRITE_REQUIRED'

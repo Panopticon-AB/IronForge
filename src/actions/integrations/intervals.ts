@@ -1,5 +1,9 @@
 'use server';
 
+import {
+  buildChatTrainingContext,
+  type ChatTrainingContext,
+} from '@/features/training-context/chatTrainingContext';
 import { getErrorMessage } from '@/lib/error-message';
 import { getActivities, getAthleteSettings, getEvents, getWellness } from '@/lib/intervals';
 import prisma from '@/lib/prisma';
@@ -31,6 +35,35 @@ async function getIntervalsCredentials() {
   };
 }
 
+export async function getChatTrainingContextAction(): Promise<ChatTrainingContext> {
+  const asOf = new Date();
+
+  try {
+    const { apiKey, athleteId } = await getIntervalsCredentials();
+    const endDate = asOf.toISOString().slice(0, 10);
+    const wellnessStartDate = new Date(asOf.getTime() - 7 * 86_400_000)
+      .toISOString()
+      .slice(0, 10);
+    const activityStartDate = new Date(asOf.getTime() - 72 * 3_600_000)
+      .toISOString()
+      .slice(0, 10);
+
+    const [wellnessResult, activities] = await Promise.all([
+      getWellness(wellnessStartDate, apiKey, athleteId, endDate),
+      getActivities(activityStartDate, endDate, apiKey, athleteId),
+    ]);
+
+    const wellness = Array.isArray(wellnessResult)
+      ? [...wellnessResult].sort((a, b) => b.date.localeCompare(a.date))[0]
+      : (wellnessResult ?? undefined);
+
+    return buildChatTrainingContext({ wellness, activities, asOf });
+  } catch (error) {
+    console.warn('Server Action Chat Training Context Error:', getErrorMessage(error));
+    return buildChatTrainingContext({ wellness: undefined, activities: [], asOf });
+  }
+}
+
 export async function getWellnessAction(date: string): Promise<IntervalsWellness> {
   try {
     const { apiKey, athleteId } = await getIntervalsCredentials();
@@ -38,16 +71,15 @@ export async function getWellnessAction(date: string): Promise<IntervalsWellness
 
     if (!data || Array.isArray(data)) return {} as IntervalsWellness;
 
-    // Map Lib type (WellnessData) to App type (IntervalsWellness)
-    // getWellness already transforms 'readiness' to 'bodyBattery'
+    // Map Lib type (WellnessData) to App type (IntervalsWellness).
+    // Missing provider values stay missing so downstream consumers can handle uncertainty explicitly.
     return {
       id: data?.id,
       hrv: data?.hrv,
       restingHR: data?.restingHR,
       sleepScore: data?.sleepScore,
       sleepSecs: data?.sleepSecs,
-      bodyBattery: data?.bodyBattery ?? 50, // Hardened mapping: ignore raw 'readiness' here as lib handles it
-
+      bodyBattery: data?.bodyBattery,
       vo2max: data?.vo2max,
       ctl: data?.ctl,
       atl: data?.atl,
@@ -78,7 +110,7 @@ export async function getWellnessRangeAction(
           restingHR: d.restingHR,
           sleepScore: d.sleepScore,
           sleepSecs: d.sleepSecs,
-          bodyBattery: d.readiness ?? d.bodyBattery ?? 50,
+          bodyBattery: d.bodyBattery,
           vo2max: d.vo2max,
           ctl: d.ctl,
           atl: d.atl,

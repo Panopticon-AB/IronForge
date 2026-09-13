@@ -22,7 +22,7 @@ jobs:
     if: >-
       github.event.pull_request.head.repo.full_name == github.repository &&
       startsWith(github.head_ref, 'jules/')
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: ubuntu-latest
     timeout-minutes: 20
     permissions:
       contents: read

@@ -70,7 +70,7 @@ const WellnessDataSchema = z
     hrv: data.hrv,
     restingHR: data.restingHR || data.resting_hr,
     readiness: data.readiness, // Export readiness so it's available in mapped types
-    bodyBattery: data.readiness ?? 50, // Default to 50 (Neutral) if missing to avoid Zod 'undefined' errors
+    bodyBattery: data.readiness,
     sleepScore: data.sleepScore || data.sleep_score,
     sleepSecs: data.sleepSecs || data.sleep_secs,
     ctl: data.ctl,

@@ -1,0 +1,17 @@
+model StrengthEvidenceSession {
+  id                String   @id @default(cuid())
+  userId            String
+  source            String
+  providerSessionId String
+  startedAt         DateTime
+  endedAt           DateTime?
+  evidenceVersion   Int      @default(1)
+  evidence          Json
+  effectState       String   @default("PENDING")
+  effectsAppliedAt  DateTime?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@unique([userId, source, providerSessionId])
+  @@index([userId, startedAt])
+}

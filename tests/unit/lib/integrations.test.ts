@@ -39,7 +39,7 @@ describe('Bio-Integrations Tests', () => {
       );
     });
 
-    it('should use default bodyBattery if readiness is missing', async () => {
+    it('should keep bodyBattery missing if readiness is missing', async () => {
       const mockResponse = {
         id: 'w1',
         date: '2024-01-01',
@@ -52,11 +52,32 @@ describe('Bio-Integrations Tests', () => {
 
       const result = await getWellness('2024-01-01', apiKey, athleteId);
 
-      expect(result).toEqual(
-        expect.objectContaining({
-          bodyBattery: 50,
-        })
-      );
+      expect(result).not.toBeNull();
+      expect(Array.isArray(result)).toBe(false);
+      if (!result || Array.isArray(result)) return;
+
+      expect(result.bodyBattery).toBeUndefined();
+    });
+
+    it('should preserve explicit null readiness as unknown', async () => {
+      const mockResponse = {
+        id: 'w1',
+        date: '2024-01-01',
+        readiness: null,
+      };
+
+      fetchMock.mockResolvedValue({
+        ok: true,
+        json: () => mockResponse,
+      });
+
+      const result = await getWellness('2024-01-01', apiKey, athleteId);
+
+      expect(result).not.toBeNull();
+      expect(Array.isArray(result)).toBe(false);
+      if (!result || Array.isArray(result)) return;
+
+      expect(result.bodyBattery).toBeNull();
     });
 
     it('should handle snake_case mapping from API', async () => {

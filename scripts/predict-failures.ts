@@ -95,8 +95,7 @@ function getChangedFiles(): string[] {
   ]) {
     try {
       const diff = execSync(command, { encoding: 'utf-8' }).trim();
-      if (diff) return diff.split('
-').filter(Boolean);
+      if (diff) return diff.split(/\r?\n/u).filter(Boolean);
     } catch {
       // Try the next safe diff source.
     }
@@ -175,13 +174,11 @@ async function databasePreflight(): Promise<DatabasePreflightResult> {
     `- TCP endpoint: \`${result.tcp}\``,
     '',
     'Endpoint values, credentials, database names and raw output are intentionally omitted.',
-  ].join('
-');
+  ].join('\n');
 
   console.log(`Database preflight: ${JSON.stringify(result)}`);
   if (process.env.GITHUB_STEP_SUMMARY) {
-    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}
-`, 'utf8');
+    appendFileSync(process.env.GITHUB_STEP_SUMMARY, `${summary}\n`, 'utf8');
   }
   return result;
 }
@@ -196,8 +193,7 @@ function isHealthyPreflight(result: DatabasePreflightResult): boolean {
 }
 
 function reportRisks(files: string[]): void {
-  console.log('
-🔮 Predictive Failure Analysis');
+  console.log('\n🔮 Predictive Failure Analysis');
   console.log(`  Files changed: ${files.length}`);
 
   const risks = analyzeRisks(files);
@@ -208,9 +204,10 @@ function reportRisks(files: string[]): void {
 
   for (const risk of risks) {
     const icon = risk.risk === 'high' ? '🔴' : '🟡';
-    console.log(`
-  ${icon} ${risk.specialist}: ${risk.reason}`);
-    risk.matchedFiles.forEach((file) => console.log(`     → ${file}`));
+    console.log(`\n  ${icon} ${risk.specialist}: ${risk.reason}`);
+    for (const file of risk.matchedFiles) {
+      console.log(`     → ${file}`);
+    }
 
     if (process.env.GITHUB_ACTIONS && risk.risk === 'high') {
       console.log(
@@ -228,11 +225,12 @@ async function main(): Promise<void> {
     console.log(
       '::warning title=Database Preflight::One or more sanitized database readiness checks failed.'
     );
-    process.exitCode = 2;
   }
 }
 
 main().catch(() => {
-  console.log('::warning title=Database Preflight::Preflight could not complete safely.');
-  process.exitCode = 2;
+  console.error(
+    '::error title=Predictive Failure Analysis::Predictive analysis could not complete safely.'
+  );
+  process.exitCode = 1;
 });
