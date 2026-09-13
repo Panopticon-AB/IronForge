@@ -1,8 +1,7 @@
+import { getWellness } from '@/lib/intervals';
 import { runFullAudit } from '@/services/auditor-orchestrator';
-import { getWellness } from '../lib/intervals';
-import type { WellnessData } from '../lib/intervals';
 import prisma from '../lib/prisma';
-import type { ExerciseLog, IntervalsActivity, TrainingPath } from '../types';
+import type { IntervalsActivity, IntervalsWellness, TrainingPath } from '../types';
 import { AnalyticsService } from './analytics';
 import { OracleService } from './oracle';
 
@@ -54,43 +53,30 @@ export const PlannerService = {
     const auditReport = await runFullAudit(true, userId);
 
     // 3. Fetch Intervals Wellness
-    let wellness: WellnessData = {
-      date: new Date().toISOString(),
-      ctl: 0,
-      atl: 0,
-      tsb: 0,
-      id: 'unknown',
-      hrv: null,
-      restingHR: null,
-      readiness: null,
-      bodyBattery: 50, // Default to 50 (Neutral) to satisfy Zod/Typescript requirements
-      sleepScore: null,
-      sleepSecs: null,
-      rampRate: null,
-      vo2max: null,
-      // Phase 2 fields
-      avgSleepingHR: null,
-      sleepQuality: null,
-      hydration: null,
-      hrvSDNN: null,
-      baevskySI: null,
-      stress: null,
-      mood: null,
-      fatigue: null,
-      menstrualPhase: null,
-      menstrualPhasePredicted: null,
-      weight: null,
-      spO2: null,
-      respiration: null,
-      bloodGlucose: null,
-      injury: null,
-      soreness: null,
-      steps: null,
-    };
+    // Provider absence is not physiology: Oracle and TTB each receive only
+    // evidence that actually exists at their boundary.
+    const wellness: IntervalsWellness = {};
+    const ttbWellness: IntervalsWellness = {};
+
     if (user.intervalsApiKey && user.intervalsAthleteId) {
       const today = new Date().toISOString().split('T')[0];
       const w = await getWellness(today, user.intervalsApiKey, user.intervalsAthleteId);
-      if (w && !Array.isArray(w)) wellness = w;
+      if (w && !Array.isArray(w)) {
+        if (w.id != null) wellness.id = w.id;
+        if (w.bodyBattery != null) wellness.bodyBattery = w.bodyBattery;
+        if (w.sleepScore != null) wellness.sleepScore = w.sleepScore;
+        if (w.hrv != null) wellness.hrv = w.hrv;
+        if (w.restingHR != null) wellness.restingHR = w.restingHR;
+        if (w.vo2max != null) wellness.vo2max = w.vo2max;
+        if (w.ctl != null) wellness.ctl = w.ctl;
+        if (w.atl != null) wellness.atl = w.atl;
+        if (w.tsb != null) wellness.tsb = w.tsb;
+        if (w.sleepSecs != null) wellness.sleepSecs = w.sleepSecs;
+        if (w.rampRate != null) wellness.ramp_rate = w.rampRate;
+
+        if (w.hrv != null) ttbWellness.hrv = w.hrv;
+        if (w.tsb != null) ttbWellness.tsb = w.tsb;
+      }
     }
 
     // 4. Map Data for Analytics (TTB Calculation)
@@ -99,39 +85,25 @@ export const PlannerService = {
       start_date_local: l.date.toISOString(),
       type: l.type || undefined,
       moving_time: l.duration,
-      icu_intensity: (l.averageHr || 140) > 160 ? 90 : 60,
-      icu_training_load: l.load || 0,
+      ...(l.averageHr == null ? {} : { icu_intensity: l.averageHr > 160 ? 90 : 60 }),
+      ...(l.load == null ? {} : { icu_training_load: l.load }),
     }));
 
-    // Use AnalyticsService for TTB
-    // Prisma types are compatible with Analytics requirements
-    // We map to ExerciseLog[] locally to adding defaults for missing fields if needed
-    // Analytics Service expects e1rm and rpe for calculation
-    const exerciseLogs: ExerciseLog[] = user.exerciseLogs.map((log) => ({
-      ...log,
-      date: log.date.toISOString(), // Convert Date to string
-      sets: log.sets as unknown as import('@/types').Set[], // JsonValue to expected type
-      e1rm: 0, // Defaulting to 0 as Prisma model lacks this column? Checked schema: it's missing.
-      rpe: 0, // Defaulting to 0
-      isEpic: log.isPersonalRecord, // Mapping isPersonalRecord to isEpic? Wait, check definitions.
-      archetype: log.archetype as unknown as import('@/types').Archetype, // Prisma Enum vs Internal Enum mismatch prevention
+    // TTB only needs strength recency and Epic/PR evidence. Do not fabricate
+    // RPE or e1RM values merely to satisfy a broader analytics type.
+    const strengthHistory = user.exerciseLogs.map((log) => ({
+      date: log.date.toISOString(),
+      isEpic: log.isPersonalRecord,
     }));
 
-    // Ensure wellness matches the shape expected by Analytics (WellnessData is compatible)
-    const ttb = AnalyticsService.calculateTTB(
-      exerciseLogs,
-      activities,
-      wellness as unknown as import('@/types').IntervalsWellness
-    );
+    const ttb = AnalyticsService.calculateTTB(strengthHistory, activities, ttbWellness);
 
-    // If auditor says we are neglecting something, that becomes lowest TTB
-    if (auditReport.highestPriorityGap) {
-      ttb.lowest = 'strength'; // Weakness found
-    }
+    // Keep audit evidence separate from TTB. `lowest` only represents a
+    // complete three-domain TTB comparison; auditReport is passed independently.
 
     // 6. Generate Plan via Oracle
     const recommendation = await OracleService.consult(
-      wellness as unknown as import('@/types').IntervalsWellness,
+      wellness,
       ttb,
       [], // events
       auditReport,

@@ -1,10 +1,16 @@
 'use server';
 
+import {
+  claimStrengthEvidenceEffects,
+  markStrengthEvidenceEffectsApplied,
+} from '@/features/strength-evidence/effect-gate';
+import { toHevyStrengthSessionEvidence } from '@/features/strength-evidence/hevy-adapter';
 import { getHevyTemplates } from '@/lib/hevy';
 import prisma from '@/lib/prisma';
 import { TerritoryService } from '@/services/game/TerritoryService';
 import type { HevyRoutine, HevyWorkout } from '@/types/hevy';
 import { createClient } from '@/utils/supabase/server';
+import type { Prisma } from '@prisma/client';
 import axios from 'axios';
 
 import { HevyHelperSchema, ImportHevyHistorySchema } from '@/types/schemas';
@@ -169,6 +175,55 @@ export async function saveWorkoutAction(apiKey: string, payload: { workout?: Hev
   }
 }
 
+async function createLegacyHevyWorkoutLogs(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  workout: HevyWorkout,
+): Promise<number> {
+  const logsToCreate: Prisma.ExerciseLogCreateManyInput[] = [];
+  const existingExercises = await tx.exercise.findMany({
+    select: { id: true, name: true },
+  });
+  const exerciseMap = new Map(existingExercises.map((exercise) => [exercise.name.toLowerCase(), exercise.id]));
+  const date = new Date(workout.start_time);
+
+  for (const exercise of workout.exercises) {
+    const title = exercise.exercise_template.title || 'Unknown Exercise';
+    let exerciseId = exerciseMap.get(title.toLowerCase());
+
+    if (!exerciseId) {
+      const newExercise = await tx.exercise.create({
+        data: {
+          name: title,
+          muscleGroup: 'Other',
+          equipment: 'Grid',
+          secondaryMuscles: [],
+        },
+      });
+      exerciseId = newExercise.id;
+      exerciseMap.set(title.toLowerCase(), exerciseId);
+    }
+
+    if (exercise.sets.length > 0) {
+      logsToCreate.push({
+        userId,
+        date,
+        exerciseId,
+        sets: exercise.sets as Prisma.InputJsonValue,
+      });
+    }
+  }
+
+  if (logsToCreate.length > 0) {
+    await tx.exerciseLog.createMany({
+      data: logsToCreate,
+      skipDuplicates: true,
+    });
+  }
+
+  return logsToCreate.length;
+}
+
 export async function importHevyHistoryAction(workouts: unknown[]) {
   const { workouts: validatedWorkouts } = ImportHevyHistorySchema.parse({
     workouts,
@@ -183,70 +238,58 @@ export async function importHevyHistoryAction(workouts: unknown[]) {
   }
 
   try {
-    const logsToCreate: any[] = []; // Keeping any[] for batch create compatibility with Prisma types if not explicitly imported
-    let importedCount = 0;
-
-    const existingExercises = await prisma.exercise.findMany({
-      select: { id: true, name: true },
-    });
-    const exerciseMap = new Map(existingExercises.map((e) => [e.name.toLowerCase(), e.id]));
+    let logsCreated = 0;
+    let importedWorkouts = 0;
+    let duplicateWorkouts = 0;
+    let unidentifiedWorkouts = 0;
 
     for (const workout of validatedWorkouts) {
-      const date = new Date(workout.start_time);
+      const evidence = toHevyStrengthSessionEvidence(workout);
 
-      for (const exercise of workout.exercises) {
-        const title = exercise.exercise_template.title || 'Unknown Exercise';
-        let exerciseId = exerciseMap.get(title.toLowerCase());
-
-        if (!exerciseId) {
-          const newExercise = await prisma.exercise.create({
-            data: {
-              name: title,
-              muscleGroup: 'Other',
-              equipment: 'Grid',
-              secondaryMuscles: [],
-            },
-          });
-          exerciseId = newExercise.id;
-          exerciseMap.set(title.toLowerCase(), exerciseId);
-        }
-
-        let bestE1rm = 0;
-
-        if (exercise.sets && Array.isArray(exercise.sets)) {
-          for (const set of exercise.sets) {
-            const weight = set.weight_kg || 0;
-            const reps = set.reps || 0;
-            if (weight > 0 && reps > 0) {
-              const e1rm = weight * (1 + reps / 30);
-              if (e1rm > bestE1rm) bestE1rm = e1rm;
-            }
-          }
-        }
-
-        if (bestE1rm > 0) {
-          logsToCreate.push({
-            userId: user.id,
-            date: date,
-            exerciseId: exerciseId,
-            sets: exercise.sets || [],
-            e1rm: bestE1rm,
-            rpe: 8,
-            isPersonalRecord: bestE1rm > 100,
-          });
-        }
+      if (!evidence.provenance.providerSessionId) {
+        const legacyLogs = await prisma.$transaction((tx) =>
+          createLegacyHevyWorkoutLogs(tx, user.id, workout)
+        );
+        logsCreated += legacyLogs;
+        importedWorkouts++;
+        unidentifiedWorkouts++;
+        continue;
       }
-      importedCount++;
-    }
 
-    if (logsToCreate.length > 0) {
-      await prisma.exerciseLog.createMany({
-        data: logsToCreate,
-        skipDuplicates: true,
+      const result = await prisma.$transaction(async (tx) => {
+        const claim = await claimStrengthEvidenceEffects(tx, user.id, evidence);
+
+        if (claim.status === 'ALREADY_APPLIED') {
+          return { status: 'DUPLICATE' as const, logs: 0 };
+        }
+
+        if (claim.status === 'SKIP_MISSING_PROVIDER_SESSION_ID') {
+          const logs = await createLegacyHevyWorkoutLogs(tx, user.id, workout);
+          return { status: 'UNIDENTIFIED' as const, logs };
+        }
+
+        const logs = await createLegacyHevyWorkoutLogs(tx, user.id, workout);
+        await markStrengthEvidenceEffectsApplied(tx, claim.sessionId);
+        return { status: 'IMPORTED' as const, logs };
       });
+
+      logsCreated += result.logs;
+      if (result.status === 'DUPLICATE') {
+        duplicateWorkouts++;
+      } else {
+        importedWorkouts++;
+        if (result.status === 'UNIDENTIFIED') unidentifiedWorkouts++;
+      }
     }
 
-    return { success: true, count: importedCount, logs: logsToCreate.length };
+    return {
+      success: true,
+      count: validatedWorkouts.length,
+      logs: logsCreated,
+      importedWorkouts,
+      duplicateWorkouts,
+      unidentifiedWorkouts,
+    };
   } catch (error: unknown) {
     const message = error instanceof Error ? error.message : 'Unknown error';
     console.error('Server Action Hevy Import Error:', message);

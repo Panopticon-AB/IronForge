@@ -21,8 +21,8 @@ interface CampaignTrackerProps {
  * Generate dynamic campaign gates based on active training path
  */
 function getPhase1Gates(
-  ctl: number,
-  wellnessScore: number,
+  ctl: number | null,
+  wellnessScore: number | null,
   level: number,
   activePath: TrainingPath,
   strengthProgress: number
@@ -40,14 +40,14 @@ function getPhase1Gates(
   const gates = [
     {
       label: `Establish Base Resilience (CTL > ${ctlThreshold})`,
-      completed: ctl >= ctlThreshold,
-      current: `${Math.round(ctl)} / ${ctlThreshold}`,
+      completed: ctl !== null && ctl >= ctlThreshold,
+      current: ctl === null ? 'unknown' : `${Math.round(ctl)} / ${ctlThreshold}`,
       pathRelevant: activePath === 'PATHFINDER' || activePath === 'WARDEN',
     },
     {
       label: 'Stabilize Recovery (Wellness > 80)',
-      completed: wellnessScore >= 80,
-      current: `${wellnessScore} / 80`,
+      completed: wellnessScore !== null && wellnessScore >= 80,
+      current: wellnessScore === null ? 'unknown' : `${wellnessScore} / 80`,
       pathRelevant: true,
     },
     {
@@ -79,8 +79,8 @@ export const CampaignTracker: React.FC<CampaignTrackerProps> = ({
   totalExperience = 0,
   weeklyMastery,
 }) => {
-  const wellnessScore = ttb?.wellness || 0;
-  const ctl = wellness?.ctl || 0;
+  const wellnessScore = ttb?.wellness ?? null;
+  const ctl = wellness?.ctl ?? null;
   const isPhase1Complete = getPhase1Gates(
     ctl,
     wellnessScore,

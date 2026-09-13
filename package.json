@@ -23,7 +23,7 @@
     "agent:verify": "turbo run lint build security",
     "ship": "pwsh ./scripts/ship.ps1",
     "test:watch": "vitest",
-    "ci:l1": "turbo run lint check-types test --filter=...[origin/main]",
+    "ci:l1": "pnpm exec tsx scripts/predict-failures.ts && pnpm exec tsx scripts/lint-changed-files.ts && pnpm run check-types && pnpm run test",
     "ci:l2": "turbo run build test:smoke",
     "ci:l3": "turbo run security test:exhaustive",
     "agent:format": "npx prettier --write .",

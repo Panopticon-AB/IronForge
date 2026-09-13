@@ -280,10 +280,10 @@ export interface TSBForecast {
 }
 
 export interface TTBIndices {
-  strength: number;
-  endurance: number;
-  wellness: number;
-  lowest: 'strength' | 'endurance' | 'wellness';
+  strength: number | null;
+  endurance: number | null;
+  wellness: number | null;
+  lowest: 'strength' | 'endurance' | 'wellness' | null;
 }
 
 export interface TitanLoadCalculation {
