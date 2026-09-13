@@ -2,6 +2,14 @@ import { GoogleGenAI, Type } from '@google/genai';
 import type { IntervalsWellness, Session, TTBIndices } from '../types';
 import { StorageService as Storage } from './storage';
 
+function formatTtbScore(score: number | null): string {
+  return score === null ? 'unknown' : String(score);
+}
+
+function formatLowestTtb(lowest: TTBIndices['lowest']): string {
+  return lowest === null ? 'unknown (insufficient complete TTB evidence)' : lowest;
+}
+
 // The Spirit Guide Service
 // Uses Gemini to act as an AI Coach with RAG context
 export const GeminiService = {
@@ -23,6 +31,10 @@ export const GeminiService = {
       .join('\n');
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const strengthLabel = formatTtbScore(ttb.strength);
+    const enduranceLabel = formatTtbScore(ttb.endurance);
+    const wellnessLabel = formatTtbScore(ttb.wellness);
+    const lowestLabel = formatLowestTtb(ttb.lowest);
 
     const prompt = `
             You are The Spirit Guide, an elite strength and conditioning coach for a "Titan" (athlete).
@@ -30,16 +42,18 @@ export const GeminiService = {
             Current Stats:
             - Body Battery: ${wellness.bodyBattery}/100
             - Sleep Score: ${wellness.sleepScore}/100
-            - TTB Balance: Strength ${ttb.strength}, Endurance ${ttb.endurance}, Wellness ${ttb.wellness}
-            - Lowest Stat: ${ttb.lowest}
+            - TTB Balance: Strength ${strengthLabel}, Endurance ${enduranceLabel}, Wellness ${wellnessLabel}
+            - Lowest Stat: ${lowestLabel}
             
             Recent Training History (Last 20 Logs):
             ${recentLogs}
 
-            Task: Generate a JSON workout Session designed to fix the lowest stat while respecting the recovery state.
-            If Wellness is low, generate an Active Recovery session.
-            If Strength is low, look at the history and target a movement that hasn't been trained recently.
-            If Endurance is low, generate a Cardio session.
+            Task: Generate a JSON workout Session while respecting measured recovery and recent training history.
+            Never interpret an unknown TTB score as a low score. Only target the lowest TTB stat when Lowest Stat is known.
+            If measured Wellness is low, generate an Active Recovery session.
+            If Strength is the known lowest stat, look at the history and target a movement that hasn't been trained recently.
+            If Endurance is the known lowest stat, generate a Cardio session.
+            If Lowest Stat is unknown, choose conservatively from measured evidence rather than inventing a deficit.
             
             Flavor: Use RPG terminology (Quest, Boss, Loot).
         `;
@@ -171,6 +185,9 @@ export const GeminiService = {
     if (!process.env.API_KEY) throw new Error('No API Key');
 
     const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+    const bodyBattery = context.wellness.bodyBattery;
+    const bodyBatteryLabel = typeof bodyBattery === 'number' ? String(bodyBattery) : 'unknown';
+    const strengthBalanceLabel = formatTtbScore(context.ttb.strength);
 
     const prompt = `
             You are The Iron Oracle, creating a 7-day training program for a specific Titan.
@@ -184,13 +201,14 @@ export const GeminiService = {
             Context:
             - Intent: ${context.intent}
             - Frequency: ${context.daysPerWeek} days/week
-            - Physiology: Body Battery ${context.wellness.bodyBattery}, Strength Balance ${context.ttb.strength}
+            - Physiology: Body Battery ${bodyBatteryLabel}, Strength Balance ${strengthBalanceLabel}
 
             Directives:
             1. Generate a 7-day plan (Monday-Sunday).
             2. Respect the 'daysPerWeek' constraint - assign "Rest Day" to others.
             3. progressive overload principles appropriate for the '${context.intent}'.
-            4. Adjust volume based on Body Battery (if < 30, force deload).
+            4. Adjust volume from measured recovery evidence. If Body Battery is measured and < 30, force deload. If Body Battery is unknown, do not infer healthy recovery or increase load because data is missing; keep difficulty at Normal or easier and use conservative volume.
+            5. Never interpret an unknown TTB balance as a low score or training deficit. Use only measured/derived evidence to justify extra work.
 
             Output JSON Schema:
             {

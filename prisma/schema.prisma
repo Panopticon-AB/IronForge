@@ -231,7 +231,7 @@ model CardioLog {
   intervalsId String   @unique
   type        String
   duration    Int
-  load        Float
+  load        Float?
   averageHr   Float?
   user        User     @relation(fields: [userId], references: [id])
 

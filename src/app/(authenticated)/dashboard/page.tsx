@@ -12,6 +12,7 @@ import { getStrengthLeaderboardAction } from '@/actions/social/leaderboards';
 import { getActiveChallengesAction } from '@/actions/systems/challenges';
 import { ensureTitanAction, syncTitanStateWithWellness } from '@/actions/titan/core';
 import { ensureUserAction } from '@/actions/user/core';
+import { buildDashboardTtb } from '@/features/dashboard/buildDashboardTtb';
 import DashboardClient from '@/features/dashboard/DashboardClient';
 import { calculateSkillEffects } from '@/features/game/hooks/useSkillEffects';
 import prisma from '@/lib/prisma';
@@ -24,13 +25,11 @@ import { Progression } from '@/services/progression';
 import { createClient } from '@/utils/supabase/server';
 import { cookies } from 'next/headers';
 import { redirect } from 'next/navigation';
-import React from 'react';
 
 import type {
   IntervalsActivity,
   IntervalsEvent,
   IntervalsWellness,
-  TTBIndices,
   TitanLoadCalculation,
 } from '@/types';
 // Types
@@ -138,21 +137,20 @@ export default async function Page() {
 
   // --- PROCESSING & ANALYSIS ---
 
-  // 1. TTB & Wellness Defaults
-  if (!wellness || !wellness.id) {
+  // 1. Build TTB from raw evidence before applying legacy dashboard defaults.
+  // Canonical Epic/PR strength evidence is not available at this boundary yet,
+  // so the strength domain intentionally remains unknown.
+  const ttb = buildDashboardTtb(activities, wellness);
+
+  // Legacy dashboard/Oracle wellness fallback. This is intentionally kept
+  // separate from TTB and will be cleaned up in a later bounded slice.
+  if (!wellness?.id) {
     wellness = {
       ctl: 0,
       ramp_rate: 0,
       sleepScore: 0,
     } as IntervalsWellness;
   }
-
-  const fakeTTB: TTBIndices = {
-    strength: 75,
-    endurance: 60,
-    wellness: wellness.sleepScore || 50,
-    lowest: 'endurance',
-  };
 
   // 2. Audit
   let report: AuditReport | null = null;
@@ -212,7 +210,7 @@ export default async function Page() {
 
   const oracleRec = await OracleService.consult(
     wellness,
-    fakeTTB,
+    ttb,
     [],
     report,
     titanAnalysis,
@@ -267,7 +265,7 @@ export default async function Page() {
     wellness,
     activities,
     events,
-    ttb: fakeTTB,
+    ttb,
     recommendation: oracleRec,
     auditReport: report,
     forecast: realForecast,
