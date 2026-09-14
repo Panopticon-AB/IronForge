@@ -27,13 +27,6 @@ interface CraftingRecipe {
   isUnlocked: boolean;
 }
 
-interface CraftingResult {
-  success: boolean;
-  item?: { id: string; name: string };
-  criticalSuccess?: boolean;
-  bonus?: string;
-  message: string;
-}
 
 // Sample materials
 const MATERIALS: CraftingMaterial[] = [
@@ -168,14 +161,14 @@ const RECIPES: CraftingRecipe[] = [
 /**
  * Get user's materials.
  */
-export const getMaterialsAction = authActionClient.action(async ({ ctx: { userId } }) => {
+export const getMaterialsAction = authActionClient.action(async () => {
   return MATERIALS;
 });
 
 /**
  * Get available recipes.
  */
-export const getRecipesAction = authActionClient.action(async ({ ctx: { userId } }) => {
+export const getRecipesAction = authActionClient.action(async () => {
   return RECIPES;
 });
 
@@ -184,7 +177,7 @@ export const getRecipesAction = authActionClient.action(async ({ ctx: { userId }
  */
 export const craftItemAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: recipeId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: recipeId }) => {
     try {
       const recipe = RECIPES.find((r) => r.id === recipeId);
       if (!recipe) {
@@ -219,7 +212,7 @@ export const craftItemAction = authActionClient
  */
 export const canCraftRecipeAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: recipeId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: recipeId }) => {
     const recipe = RECIPES.find((r) => r.id === recipeId);
     if (!recipe) return { canCraft: false, missingMaterials: [] };
 

@@ -13,7 +13,7 @@ async function checkSupabaseHealth(url: string): Promise<boolean> {
     }
     const data = await resp.json();
     return !!data;
-  } catch (err) {
+  } catch (_err) {
     return false;
   }
 }

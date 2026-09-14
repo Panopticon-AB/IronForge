@@ -1,7 +1,6 @@
 'use server';
 
 import { spawn } from 'node:child_process';
-import path from 'node:path';
 
 export async function renderVideoAction(props: Record<string, unknown>) {
   try {

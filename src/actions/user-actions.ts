@@ -1,7 +1,6 @@
 'use server';
 
 import prisma from '@/lib/prisma';
-import { AppSettings, Equipment } from '@/types';
 import type { SafeUser } from '@/types/schemas';
 import type { User } from '@prisma/client';
 import { z } from 'zod';
@@ -10,25 +9,29 @@ import { z } from 'zod';
 
 const emailSchema = z.string().email().optional();
 
+const SENSITIVE_USER_FIELDS = [
+  'intervalsApiKey',
+  'intervalsAthleteId',
+  'hevyApiKey',
+  'stravaAccessToken',
+  'stravaRefreshToken',
+  'stravaExpiresAt',
+  'stravaAthleteId',
+  'garminAccessToken',
+  'garminRefreshToken',
+  'garminUserSecret',
+  'garminUserToken',
+  'pocketCastsToken',
+] as const satisfies readonly (keyof User)[];
+
 function sanitizeUser(user: User | null): SafeUser | null {
   if (!user) return null;
 
-  // Use destructuring to omit sensitive fields
-  const {
-    intervalsApiKey,
-    intervalsAthleteId,
-    hevyApiKey,
-    stravaAccessToken,
-    stravaRefreshToken,
-    stravaExpiresAt,
-    stravaAthleteId,
-    garminAccessToken,
-    garminRefreshToken,
-    garminUserSecret,
-    garminUserToken,
-    pocketCastsToken,
-    ...safeUser
-  } = user;
+  const safeUser = Object.fromEntries(
+    Object.entries(user).filter(
+      ([key]) => !SENSITIVE_USER_FIELDS.includes(key as (typeof SENSITIVE_USER_FIELDS)[number])
+    )
+  );
 
   return safeUser as SafeUser;
 }

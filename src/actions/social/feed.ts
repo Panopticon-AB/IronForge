@@ -2,26 +2,6 @@ import { authActionClient } from '@/lib/safe-action';
 import { z } from 'zod';
 // import { prisma } from "@/lib/prisma";
 
-interface FeedItem {
-  id: string;
-  type: 'WORKOUT' | 'ACHIEVEMENT' | 'PR' | 'LEVEL_UP' | 'STREAK';
-  userId: string;
-  userHeroName: string;
-  userAvatar?: string;
-  timestamp: Date;
-  content: {
-    title: string;
-    description: string;
-    stats?: Record<string, string | number>;
-    imageUrl?: string;
-  };
-  reactions: {
-    likes: number;
-    comments: number;
-    hasLiked: boolean;
-  };
-}
-
 /**
  * Get social feed for user.
  */
@@ -34,9 +14,7 @@ export const getSocialFeedAction = authActionClient
       })
       .optional()
   )
-  .action(async ({ parsedInput, ctx: { userId } }) => {
-    const _limit = parsedInput?.limit ?? 20;
-    const _offset = parsedInput?.offset ?? 0;
+  .action(() => {
     try {
       // MVP: Return sample feed
       return [
@@ -115,7 +93,7 @@ export const getSocialFeedAction = authActionClient
  */
 export const likeFeedItemAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: feedItemId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: feedItemId }) => {
     try {
       console.log(`User ID:[REDACTED] liked feed item ${feedItemId}`);
       return { success: true, newCount: 14 }; // Mock
@@ -130,7 +108,7 @@ export const likeFeedItemAction = authActionClient
  */
 export const unlikeFeedItemAction = authActionClient
   .schema(z.string())
-  .action(async ({ parsedInput: feedItemId, ctx: { userId } }) => {
+  .action(async ({ parsedInput: feedItemId }) => {
     try {
       console.log(`User ID:[REDACTED] unliked feed item ${feedItemId}`);
       return { success: true, newCount: 12 };
@@ -150,7 +128,7 @@ export const commentOnFeedItemAction = authActionClient
       comment: z.string().max(500),
     })
   )
-  .action(async ({ parsedInput: { feedItemId, comment }, ctx: { userId } }) => {
+  .action(async ({ parsedInput: { feedItemId, comment } }) => {
     try {
       // Log only metadata — never raw comment content to prevent PII exposure
       console.log(`Comment on feedItem:${feedItemId} (len:${comment.length})`);
@@ -171,7 +149,7 @@ export const shareWorkoutToFeedAction = authActionClient
       message: z.string().optional(),
     })
   )
-  .action(async ({ parsedInput: { workoutId, message }, ctx: { userId } }) => {
+  .action(async ({ parsedInput: { workoutId } }) => {
     try {
       console.log(`User ID:[REDACTED] shared workout ${workoutId} with message: [REDACTED]`);
       return { success: true, feedItemId: `feed-${Date.now()}` };

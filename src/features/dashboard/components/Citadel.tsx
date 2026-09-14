@@ -5,7 +5,6 @@ import { CampaignTracker } from '@/features/game/components/campaign/CampaignTra
 import { PocketCastsPlayer } from '@/features/podcast/components/PocketCastsPlayer';
 import type React from 'react';
 import type { DashboardAction, DashboardState } from '../types';
-import { StrengthLeaderboardPanel } from '../widgets/StrengthLeaderboardPanel';
 import { FeedPanel } from './FeedPanel';
 import { QuickActions } from './QuickActions';
 import { StatsHeader } from './StatsHeader';
@@ -25,7 +24,6 @@ export const Citadel: React.FC<CitadelProps> = ({
   titanState,
   pocketCastsConnected,
   liteMode,
-  leaderboardEntries = [],
 }) => (
   <div className="w-full max-w-6xl mx-auto p-4 md:p-6 space-y-8 animate-fade-in">
     <StatsHeader state={state} titanState={titanState} liteMode={liteMode} />

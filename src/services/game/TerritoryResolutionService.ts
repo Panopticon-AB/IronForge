@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { Guild, Territory, type TerritoryContestEntry } from '@prisma/client';
+import { type TerritoryContestEntry } from '@prisma/client';
 
 export class TerritoryResolutionService {
   /**

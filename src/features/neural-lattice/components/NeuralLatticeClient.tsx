@@ -1,10 +1,9 @@
 'use client';
 
 import { unlockSkillNodeAction } from '@/actions/training/neural-lattice';
-import { useActionState, useState } from 'react';
+import { useState } from 'react';
 import { toast } from 'sonner';
 import { NEURAL_LATTICE_DATA } from '../data';
-import { SkillNode } from '../types';
 import { NeuralLatticeVisual } from './NeuralLatticeVisual';
 
 interface NeuralLatticeClientProps {

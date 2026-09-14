@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { startOfWeek, subDays, subWeeks } from 'date-fns';
+import { subWeeks } from 'date-fns';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { PowerRatingService } from '../PowerRatingService';
 

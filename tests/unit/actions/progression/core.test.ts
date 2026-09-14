@@ -1,6 +1,5 @@
 import { awardGoldAction, getProgressionAction } from '@/actions/progression/core';
 import { ProgressionService } from '@/services/progression';
-import { createClient } from '@/utils/supabase/server';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Mock dependencies
