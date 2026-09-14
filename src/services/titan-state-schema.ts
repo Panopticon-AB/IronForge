@@ -1,19 +1,13 @@
 'use server';
 
 import { prisma } from '@/lib/prisma';
-import { z } from 'zod';
 
 // ============================================
 // UNIFIED TITAN SOUL - STATE SCHEMA
 // Authoritative server-side Titan state management
 // ============================================
 
-import {
-  type TitanMutation,
-  TitanMutationSchema,
-  type TitanState,
-  TitanStateSchema,
-} from '@/types/schemas';
+import { type TitanState } from '@/types/schemas';
 
 /**
  * Get authoritative Titan state from server.

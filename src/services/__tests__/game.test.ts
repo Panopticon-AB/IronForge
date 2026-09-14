@@ -1,4 +1,3 @@
-import prisma from '@/lib/prisma';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { Loot } from '../loot';
 import { Progression } from '../progression';

@@ -23,7 +23,7 @@ test.describe('TV Mode (Iron Command Center)', () => {
     await expect(tvMode.raidTarget).toBeVisible();
   });
 
-  test('should toggle HUD visibility with Spacebar', async ({ page }) => {
+  test('should toggle HUD visibility with Spacebar', async () => {
     await tvMode.launch();
     await expect(tvMode.tvContainer).toBeVisible();
 

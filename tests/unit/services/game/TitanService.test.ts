@@ -1,4 +1,3 @@
-import { SKILL_TREE } from '@/data/static';
 import { prisma } from '@/lib/prisma';
 import { GameContextService } from '@/services/game/GameContextService';
 import { TitanService } from '@/services/game/TitanService';

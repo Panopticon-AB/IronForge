@@ -1,7 +1,7 @@
 'use client';
 
 import { motion } from 'framer-motion';
-import { Play, Settings2, ShieldAlert, Zap } from 'lucide-react';
+import { Play, Settings2 } from 'lucide-react';
 import type React from 'react';
 
 interface TodaysMissionProps {

@@ -1,6 +1,6 @@
 'use client';
 
-import { TitanWeeklyRecap, titanRecapSchema } from '@/remotion/TitanWeeklyRecap';
+import { TitanWeeklyRecap } from '@/remotion/TitanWeeklyRecap';
 import dynamic from 'next/dynamic';
 import { useState } from 'react';
 

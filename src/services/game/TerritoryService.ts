@@ -1,5 +1,5 @@
 import prisma from '@/lib/prisma';
-import { format, getISOWeek, getISOWeekYear } from 'date-fns';
+import { getISOWeek, getISOWeekYear } from 'date-fns';
 
 export const CONTEST_COST_GOLD = 1000;
 export const CONTEST_DURATION_DAYS = 7;

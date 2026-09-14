@@ -19,11 +19,10 @@ interface InventoryItem {
 }
 
 interface InventoryListProps {
-  userId: string;
   initialInventory: InventoryItem[];
 }
 
-export function InventoryList({ userId, initialInventory }: InventoryListProps) {
+export function InventoryList({ initialInventory }: InventoryListProps) {
   const [items, setItems] = useState(initialInventory);
   const [loading, setLoading] = useState<string | null>(null);
 

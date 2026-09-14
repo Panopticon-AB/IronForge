@@ -1,5 +1,5 @@
 import type { CardioLog } from '@/types/prisma';
-import type { StravaActivity, StravaTokenResponse } from '@/types/schemas';
+import type { StravaActivity } from '@/types/schemas';
 
 export type { StravaActivity, StravaTokenResponse, StravaUploadResponse } from '@/types/schemas';
 
