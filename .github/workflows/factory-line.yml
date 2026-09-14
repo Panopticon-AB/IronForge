@@ -5,15 +5,15 @@ on:
   workflow_dispatch:
     inputs:
       feature_name:
-        description: 'Name of the feature (must match specs/NAME.md)'
+        description: "Name of the feature (must match specs/NAME.md)"
         required: true
       station:
-        description: 'Target Station (design, fabrication, verify, ship)'
+        description: "Target Station (design, fabrication, verify, ship)"
         required: true
-        default: 'verify'
+        default: "verify"
   push:
     paths:
-      - 'specs/**'
+      - "specs/**"
 
 permissions: read-all
 
@@ -24,6 +24,10 @@ concurrency:
 jobs:
   factory-line:
     runs-on: [self-hosted, linux, panopticon, ci, small]
+    env:
+      GH_PAT: ${{ secrets.GH_PAT || github.token }}
+      NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL || 'http://127.0.0.1:54421' }}
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY || 'dummy' }}
     permissions:
       contents: write
       pull-requests: write
@@ -32,14 +36,16 @@ jobs:
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-      
+        with:
+          token: ${{ secrets.GH_PAT || github.token }}
+
       - name: Setup IronForge
         uses: ./.github/actions/setup-ironforge
 
       - name: 🏭 Factory Manager
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT || github.token }}
         run: |
           $Feature = "${{ github.event.inputs.feature_name }}"
           if (-not $Feature) {
@@ -57,7 +63,7 @@ jobs:
                Write-Host "Detected Spec Change: $Feature"
             }
           }
-          
+
           if ($Feature) {
              ./.agent/scripts/factory-manager.ps1 -Feature $Feature -Station "${{ github.event.inputs.station || 'verify' }}"
           } else {
