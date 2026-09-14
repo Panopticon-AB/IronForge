@@ -105,7 +105,7 @@
     "qrcode.react": "^4.2.0",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
-    "react-dropzone": "^15.0.0",
+    "react-dropzone": "^20.1.1",
     "react-player": "^3.4.0",
     "reactflow": "^11.11.4",
     "recharts": "^3.9.2",
