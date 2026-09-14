@@ -28,7 +28,7 @@ env:
 jobs:
   monitor:
     name: 📊 Jules Session Monitor
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, trusted-github-write]
     permissions:
       contents: read
       pull-requests: read

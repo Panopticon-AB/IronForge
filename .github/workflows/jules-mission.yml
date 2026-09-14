@@ -15,7 +15,7 @@ permissions: read-all
 jobs:
   jules-invoke:
     name: Invoke Jules
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     env:
       NODE_VERSION: '22'
     steps:

@@ -21,7 +21,7 @@ permissions: read-all
 jobs:
   dispatch:
     name: "🩺 ${{ github.event.action }} Specialist"
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     timeout-minutes: 15
     permissions:
       contents: write

@@ -265,7 +265,7 @@ jobs:
   l2-verification:
     name: "🚀 L2: Verification"
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Target specific local runner
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved] # Target specific local runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-ironforge
@@ -308,7 +308,7 @@ jobs:
     name: "🐳 Docker: Build Verify"
     needs: l2-verification
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - name: Set up Docker Buildx
@@ -344,7 +344,7 @@ jobs:
   e2e:
     name: 🎭 E2E Tests
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Trusted post-merge lane only
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved] # Trusted post-merge lane only
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -424,7 +424,7 @@ jobs:
     name: "🎭 L2: E2E Smoke"
     needs: [l2-verification]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Target specific local runner
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved] # Target specific local runner
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5437/ironforge_test?schema=public
       DIRECT_URL: postgresql://postgres:postgres@localhost:5437/ironforge_test?schema=public
@@ -470,7 +470,7 @@ jobs:
     name: "📊 L2: Perf Audit"
     needs: [l2-verification]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Target specific local runner
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved] # Target specific local runner
     env:
       DATABASE_URL: postgresql://postgres:postgres@localhost:5433/ironforge_test?schema=public
       DIRECT_URL: postgresql://postgres:postgres@localhost:5433/ironforge_test?schema=public
@@ -508,7 +508,7 @@ jobs:
   l2-db-guard:
     name: "🗄️ L2: DB Guard"
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Target specific local runner
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved] # Target specific local runner
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
       - uses: ./.github/actions/setup-ironforge
@@ -549,7 +549,7 @@ jobs:
     name: 🏥 Deployment Status
     needs: [l2-verification, l2-e2e-smoke, l2-db-guard, l2-perf-audit]
     if: github.ref == 'refs/heads/main' || startsWith(github.ref, 'refs/heads/fix/')
-    runs-on: [self-hosted, linux, panopticon, ci, small] # Target specific local runner
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved] # Target specific local runner
     steps:
       - name: Verify Health
         env:
@@ -568,7 +568,7 @@ jobs:
     name: 📦 Publish Docker Image
     needs: [l2-verification]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: read
       packages: write

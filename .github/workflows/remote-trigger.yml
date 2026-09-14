@@ -65,7 +65,7 @@ env:
 jobs:
   validate:
     name: 🔐 Validate & Route
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     outputs:
       workflow: ${{ steps.parse.outputs.workflow }}
       mode: ${{ steps.parse.outputs.mode }}
@@ -138,7 +138,7 @@ jobs:
     name: 🚀 Execute (${{ needs.validate.outputs.mode }})
     needs: validate
     if: needs.validate.outputs.is_valid != 'false'
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: write
       pull-requests: write

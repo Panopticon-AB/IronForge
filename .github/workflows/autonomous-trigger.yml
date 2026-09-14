@@ -48,7 +48,7 @@ concurrency:
 
 jobs:
   run-autonomous-workflow:
-    runs-on: self-hosted
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     timeout-minutes: 120
     permissions:
       contents: write
@@ -60,10 +60,10 @@ jobs:
           fetch-depth: 0
 
       - name: Execute Workflow
-        shell: powershell
+        shell: pwsh
         run: |
           Set-Location $env:GITHUB_WORKSPACE
-          .\scripts\workflow-launcher.ps1 -Workflow "${{ inputs.workflow }}" -Model "${{ inputs.model }}"
+          ./scripts/workflow-launcher.ps1 -Workflow "${{ inputs.workflow }}" -Model "${{ inputs.model }}"
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}

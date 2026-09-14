@@ -17,7 +17,7 @@ permissions: read-all
 jobs:
   rollback:
     name: 🔄 Trigger Coolify Rollback
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: read
       issues: write
