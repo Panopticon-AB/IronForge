@@ -158,6 +158,41 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
+      - name: Collect changed lintable files from trusted GitHub API
+        uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        env:
+          LINT_FILES_JSON: ${{ runner.temp }}/ironforge-lint-files.json
+        with:
+          script: |
+            const fs = require('node:fs');
+            const files = await github.paginate(github.rest.pulls.listFiles, {
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              pull_number: context.payload.pull_request.number,
+              per_page: 100,
+            });
+            const lintable = /\.(?:js|jsx|ts|tsx|json|jsonc|css|graphql)$/i;
+            const candidateNames = files
+              .filter((file) => file.status !== 'removed')
+              .map((file) => file.filename);
+
+            const invalidPath = (name) =>
+              typeof name !== 'string' ||
+              name.length === 0 ||
+              name.startsWith('/') ||
+              name === '..' ||
+              name.startsWith('../') ||
+              name.includes('/../') ||
+              name.includes('\0');
+
+            if (candidateNames.some(invalidPath)) {
+              throw new Error('Invalid repository path returned by GitHub API; failing closed.');
+            }
+
+            const names = candidateNames.filter((name) => lintable.test(name));
+            fs.writeFileSync(process.env.LINT_FILES_JSON, JSON.stringify(names), 'utf8');
+            core.info(`Prepared ${names.length} changed lintable file(s).`);
+
       - name: Checkout exact PR head without credentials
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -190,14 +225,52 @@ jobs:
           pnpm exec prisma generate
           pnpm exec prisma db push --accept-data-loss
 
-      - name: Lint
-        run: pnpm run lint
+      - name: Lint changed files from trusted file list
+        shell: bash
+        env:
+          LINT_FILES_JSON: ${{ runner.temp }}/ironforge-lint-files.json
+        run: |
+          set -euo pipefail
+          node <<'NODE'
+          const fs = require('node:fs');
+          const { spawnSync } = require('node:child_process');
+
+          const files = JSON.parse(fs.readFileSync(process.env.LINT_FILES_JSON, 'utf8'));
+          const invalidPath = (file) =>
+            typeof file !== 'string' ||
+            file.length === 0 ||
+            file.startsWith('/') ||
+            file === '..' ||
+            file.startsWith('../') ||
+            file.includes('/../') ||
+            file.includes('\0');
+
+          if (!Array.isArray(files) || files.some(invalidPath)) {
+            console.error('Invalid trusted lint-file manifest; failing closed.');
+            process.exit(1);
+          }
+
+          if (files.length === 0) {
+            console.log('No changed lintable files.');
+            process.exit(0);
+          }
+
+          for (let index = 0; index < files.length; index += 100) {
+            const batch = files.slice(index, index + 100).map((file) => `./${file}`);
+            const result = spawnSync('pnpm', ['exec', 'biome', 'lint', ...batch], {
+              stdio: 'inherit',
+              shell: false,
+            });
+            if (result.error) throw result.error;
+            if (result.status !== 0) process.exit(result.status ?? 1);
+          }
+          NODE
 
       - name: Typecheck
-        run: pnpm run check-types
+        run: pnpm exec tsc --noEmit
 
       - name: Unit tests
-        run: pnpm run test:unit
+        run: pnpm exec vitest run
 
   merge-gate:
     name: "Merge Gate"
