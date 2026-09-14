@@ -25,10 +25,13 @@ permissions:
 jobs:
   update_project:
     name: Best-effort Project V2 sync
-    runs-on: ubuntu-24.04
+    runs-on: [self-hosted, linux, panopticon, ci, small, trusted-github-write]
     timeout-minutes: 5
     # Skip for Dependabot PRs — Dependabot cannot receive repository secrets.
-    if: github.actor != 'dependabot[bot]'
+    if: >-
+      github.actor != 'dependabot[bot]' &&
+      (github.event_name != 'pull_request' ||
+       github.event.pull_request.head.repo.full_name == github.repository)
     permissions:
       contents: read
 

@@ -14,7 +14,7 @@ permissions: read-all
 jobs:
   synthetic-check:
     name: 🏥 Prod Health Check
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: read
       issues: write

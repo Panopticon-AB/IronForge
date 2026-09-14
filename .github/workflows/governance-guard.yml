@@ -34,6 +34,56 @@ jobs:
           ERRORS=0
 
           for file in .github/workflows/*.yml; do
+            # Inspect the complete runs-on selector, including YAML block-style arrays
+            # and folded expressions, so self-hosted jobs cannot bypass trust classes
+            # by moving labels onto following physical lines.
+            if awk '
+              function flush_selector() {
+                if (in_runs_on &&
+                    selector ~ /(^|[^[:alnum:]_-])self-hosted([^[:alnum:]_-]|$)/ &&
+                    selector !~ /(pr-readonly|trusted-github-write|live-approved)/) {
+                  violation = 1
+                }
+                in_runs_on = 0
+                selector = ""
+              }
+              {
+                line = $0
+                match(line, /^[[:space:]]*/)
+                indent = RLENGTH
+
+                if (in_runs_on &&
+                    line !~ /^[[:space:]]*($|#)/ &&
+                    indent <= runs_on_indent) {
+                  flush_selector()
+                }
+
+                if (!in_runs_on && line ~ /^[[:space:]]*runs-on[[:space:]]*:/) {
+                  in_runs_on = 1
+                  runs_on_indent = indent
+                  selector = line
+                  sub(/^[[:space:]]*runs-on[[:space:]]*:[[:space:]]*/, "", selector)
+
+                  if (selector != "" && selector !~ /^[>|][-+]?[[:space:]]*$/) {
+                    flush_selector()
+                  }
+                  next
+                }
+
+                if (in_runs_on) {
+                  selector = selector " " line
+                }
+              }
+              END {
+                flush_selector()
+                if (violation) exit 0
+                exit 1
+              }
+            ' "$file"; then
+              echo "❌ $file: Self-hosted job is missing a runner trust-class label" >> "$GITHUB_STEP_SUMMARY"
+              ERRORS=$((ERRORS + 1))
+            fi
+
             # Skip itself and specialized workflows that don't use Node standard runners.
             if [[ "$file" == *"/governance-guard.yml" || "$file" == *"/labeler.yml" || "$file" == *"/release-drafter.yml" || "$file" == *"/stale.yml" || "$file" == *"/scorecard.yml" || "$file" == *"/project-automation.yml" || "$file" == *"/dependabot-auto-merge.yml" || "$file" == *"/runner-heartbeat.yml" || "$file" == *"/ethicalcheck.yml" ]]; then continue; fi
 

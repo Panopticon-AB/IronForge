@@ -3,7 +3,7 @@ name: Network Debug
 on: workflow_dispatch
 jobs:
   debug:
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     steps:
       - name: Install Tailscale
         run: |

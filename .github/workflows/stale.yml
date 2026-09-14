@@ -8,7 +8,7 @@ permissions: read-all
 
 jobs:
   stale:
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, trusted-github-write]
     permissions:
       issues: write
       pull-requests: write

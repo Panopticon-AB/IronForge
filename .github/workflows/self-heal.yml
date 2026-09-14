@@ -9,7 +9,7 @@ permissions: read-all
 
 jobs:
   heal:
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, trusted-github-write]
     permissions:
       contents: write
       pull-requests: write

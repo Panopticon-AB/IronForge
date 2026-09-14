@@ -17,7 +17,7 @@ permissions: read-all
 jobs:
   nightly-e2e:
     name: 🎭 Execute Nightly E2E
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: read
     outputs:
@@ -84,7 +84,7 @@ jobs:
     name: 🤖 Jules Analyzer
     needs: nightly-e2e
     if: needs.nightly-e2e.outputs.e2e_failed == 'true'
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: read
       issues: write

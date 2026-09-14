@@ -9,7 +9,7 @@ permissions: read-all
 
 jobs:
   dependabot:
-    runs-on: ubuntu-latest
+    runs-on: [self-hosted, linux, panopticon, ci, small, trusted-github-write]
     if: ${{ github.actor == 'dependabot[bot]' }}
     permissions:
       contents: write
