@@ -259,6 +259,80 @@ jobs:
 
 
   # ==================================================================
+  # COVERAGE & DEEPSOURCE VERIFICATION
+  # Objective: Deterministic LCOV coverage & DeepSource reporting.
+  # ==================================================================
+  coverage-verify:
+    name: "🧪 Coverage & DeepSource Verification"
+    if: >-
+      ((github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.full_name == github.repository) ||
+       github.ref == 'refs/heads/main' ||
+       startsWith(github.ref, 'refs/heads/fix/') ||
+       startsWith(github.ref, 'refs/heads/feat/'))
+    runs-on: ${{ github.event_name == 'pull_request' && fromJSON(format('["self-hosted","linux","panopticon","ci","small","pr-readonly","repo-ironforge","pr-{0}"]', github.event.pull_request.number)) || fromJSON('["self-hosted","linux","panopticon","ci","small","trusted-github-write"]') }}
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ironforge
+        with:
+          tier: 'l1'
+          is-container: 'true'
+      - name: Run Unit Tests with Coverage
+        run: pnpm run test:coverage
+      - name: Validate Coverage & Report to DeepSource
+        shell: bash
+        env:
+          DEEPSOURCE_DSN: ${{ github.event_name != 'pull_request' && secrets.DEEPSOURCE_DSN || '' }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: |
+          echo "========================================="
+          echo "PR Head SHA: ${HEAD_SHA}"
+          echo "Workflow Run ID: ${{ github.run_id }}"
+          echo "========================================="
+
+          COVERAGE_FILE="coverage/lcov.info"
+
+          if [ ! -f "$COVERAGE_FILE" ] || [ ! -s "$COVERAGE_FILE" ]; then
+            echo "❌ ERROR: Coverage report file '$COVERAGE_FILE' is missing or 0 bytes!"
+            echo "::error::COVERAGE_REPORT_MISSING_OR_INVALID: coverage/lcov.info does not exist or is empty."
+            echo "STATUS: FAILED (COVERAGE_REPORT_MISSING_OR_INVALID)"
+            exit 1
+          fi
+
+          echo "✅ Coverage report validated: $COVERAGE_FILE exists and is non-empty."
+          echo "STATUS: COVERAGE_TESTS_PASSED"
+
+          if [ -n "$DEEPSOURCE_DSN" ]; then
+            echo "📡 Reporting coverage to DeepSource using DeepSource CLI..."
+            if curl -sSL https://deepsource.io/cli | sh; then
+              if ./bin/deepsource report --analyzer test-coverage --key javascript --value-file "$COVERAGE_FILE"; then
+                echo "✅ DeepSource coverage report submitted successfully."
+                echo "STATUS: DEEPSOURCE_UPLOAD_SUCCESS"
+              else
+                echo "⚠️ WARNING: DeepSource CLI coverage upload failed (transport/ingest error)."
+                echo "STATUS: DEEPSOURCE_UPLOAD_TRANSPORT_ERROR"
+              fi
+            else
+              echo "⚠️ WARNING: Failed to download DeepSource CLI (transport error)."
+              echo "STATUS: DEEPSOURCE_CLI_DOWNLOAD_TRANSPORT_ERROR"
+            fi
+          else
+            echo "ℹ️ DEEPSOURCE_DSN not set. Skipping DeepSource coverage upload."
+            echo "STATUS: DEEPSOURCE_SKIPPED_NO_DSN"
+          fi
+
+          echo "========================================="
+          echo "Final Execution Summary:"
+          echo "Head SHA: ${HEAD_SHA}"
+          echo "Coverage Validation: PASSED"
+          echo "========================================="
+
+  # ==================================================================
   # TIER L2: FULL VERIFICATION (MERGE)
   # Objective: Comprehensive check before deployment.
   # ==================================================================
