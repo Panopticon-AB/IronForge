@@ -48,14 +48,27 @@ jobs:
     outputs:
       run-db-guard: ${{ steps.classify.outputs.run-db-guard }}
       classification: ${{ steps.classify.outputs.classification }}
+      trusted-base-sha: ${{ steps.trusted-base.outputs.sha }}
     steps:
-      - name: Checkout trusted base control plane
+      - name: Checkout current trusted main control plane
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: main
           path: trusted-base
           fetch-depth: 1
           persist-credentials: false
+
+      - name: Pin trusted base commit
+        id: trusted-base
+        shell: bash
+        run: |
+          set -euo pipefail
+          sha="$(git -C trusted-base rev-parse HEAD)"
+          if [[ ! "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo '::error::Could not resolve a full trusted main commit SHA.'
+            exit 1
+          fi
+          printf 'sha=%s\n' "$sha" >> "$GITHUB_OUTPUT"
 
       - name: Collect changed files from GitHub API
         uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
@@ -139,10 +152,10 @@ jobs:
           --health-retries 10
 
     steps:
-      - name: Checkout trusted base helpers
+      - name: Checkout pinned trusted base helpers
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
-          ref: ${{ github.event.pull_request.base.sha }}
+          ref: ${{ needs.classify-db-impact.outputs.trusted-base-sha }}
           path: trusted-base
           fetch-depth: 1
           persist-credentials: false
