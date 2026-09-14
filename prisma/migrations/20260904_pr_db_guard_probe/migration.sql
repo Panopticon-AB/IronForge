@@ -1,0 +1,2 @@
+-- Disposable CI-only probe for IronForge #622.
+-- Intentionally no DDL: validates that prisma/migrations/** activates the trusted PR DB Guard.
