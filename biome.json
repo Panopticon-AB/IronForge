@@ -1,14 +1,13 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.5.2/schema.json",
+  "$schema": "https://biomejs.dev/schemas/1.9.4/schema.json",
   "files": {
-    "includes": [
-      "**",
-      "!**/android",
-      "!**/apps/mcp-n8n/dist",
-      "!**/apps/mcp-n8n/build",
-      "!**/node_modules",
-      "!**/public",
-      "!**/.next"
+    "ignore": [
+      "android/**",
+      "apps/mcp-n8n/dist/**",
+      "apps/mcp-n8n/build/**",
+      "node_modules/**",
+      "public/**",
+      "**/.next/**"
     ]
   },
   "vcs": {
@@ -25,10 +24,13 @@
   "linter": {
     "enabled": true,
     "rules": {
-      "preset": "recommended",
-      "a11y": {},
+      "recommended": true,
+      "a11y": {
+        "all": false
+      },
       "style": {
         "noNonNullAssertion": "off",
+        "noCommaOperator": "off",
         "useConst": "off",
         "useSelfClosingElements": "off",
         "noParameterAssign": "off"
@@ -50,8 +52,7 @@
       },
       "complexity": {
         "noForEach": "off",
-        "noStaticOnlyClass": "off",
-        "noCommaOperator": "off"
+        "noStaticOnlyClass": "off"
       }
     }
   },
