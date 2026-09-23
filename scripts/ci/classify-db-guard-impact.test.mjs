@@ -26,8 +26,10 @@ test('parses changed-file text deterministically', () => {
   assert.deepEqual(parseChangedPathText('\n'), []);
 });
 
-test('recognizes Prisma schema and migration changes', () => {
+test('recognizes every Prisma schema file and migrations', () => {
   assert.equal(isDatabaseGuardPath('prisma/schema.prisma'), true);
+  assert.equal(isDatabaseGuardPath('prisma/strength-evidence.prisma'), true);
+  assert.equal(isDatabaseGuardPath('prisma/models/future-domain.prisma'), true);
   assert.equal(
     isDatabaseGuardPath('prisma/migrations/20260904_training_context/migration.sql'),
     true,
@@ -36,8 +38,17 @@ test('recognizes Prisma schema and migration changes', () => {
   assert.equal(isDatabaseGuardPath('src/services/planner.ts'), false);
 });
 
-test('schema changes enable DB Guard', () => {
+test('main schema changes enable DB Guard', () => {
   assert.deepEqual(classifyDbGuardImpact(['prisma/schema.prisma']), {
+    runDbGuard: true,
+    classification: 'prisma_database_change',
+    changedPathCount: 1,
+    databasePathCount: 1,
+  });
+});
+
+test('split schema changes enable DB Guard', () => {
+  assert.deepEqual(classifyDbGuardImpact(['prisma/strength-evidence.prisma']), {
     runDbGuard: true,
     classification: 'prisma_database_change',
     changedPathCount: 1,
