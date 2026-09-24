@@ -13,7 +13,8 @@ on:
     types: [opened, synchronize, reopened, ready_for_review]
     branches: [main]
     paths:
-      - 'prisma/schema.prisma'
+      - 'prisma/*.prisma'
+      - 'prisma/**/*.prisma'
       - 'prisma/migrations/**'
 
 permissions:
@@ -193,7 +194,7 @@ jobs:
 
       - name: Validate candidate schema with trusted Prisma toolchain
         working-directory: trusted-base
-        run: pnpm exec prisma validate --schema ../candidate/prisma/schema.prisma
+        run: pnpm exec prisma validate --schema ../candidate/prisma
 
       - name: Capture trusted-base and candidate migration drift
         id: drift
@@ -208,14 +209,14 @@ jobs:
           set +e
           pnpm exec prisma migrate diff \
             --from-migrations prisma/migrations \
-            --to-schema prisma/schema.prisma \
+            --to-schema prisma \
             --script \
             --exit-code > "$BASE_DRIFT_FILE"
           base_status=$?
 
           pnpm exec prisma migrate diff \
             --from-migrations ../candidate/prisma/migrations \
-            --to-schema ../candidate/prisma/schema.prisma \
+            --to-schema ../candidate/prisma \
             --script \
             --exit-code > "$CANDIDATE_DRIFT_FILE"
           candidate_status=$?
