@@ -184,3 +184,33 @@ export const CanonicalStrengthSetSchema = z
 
 export type CanonicalStrengthSetInput = z.input<typeof CanonicalStrengthSetSchema>;
 export type ValidatedCanonicalStrengthSet = z.infer<typeof CanonicalStrengthSetSchema>;
+
+/**
+ * Explicit schema for user corrections to an existing canonical set.
+ * Identity fields (id, clientWriteId, performedExerciseId, createdAt) are strictly prohibited.
+ * completedAt is immutable by default (a recorded set's timestamp reflects when it occurred).
+ */
+export const CorrectStrengthSetSchema = z
+  .object({
+    load: z.number().nonnegative().optional(),
+    loadUnit: z.enum(['KG', 'LBS']).optional(),
+    loadSemantics: z
+      .enum([
+        'TOTAL_EXTERNAL_LOAD',
+        'ADDED_LOAD',
+        'PER_HAND',
+        'BODYWEIGHT',
+        'ASSISTED_BODYWEIGHT',
+      ])
+      .optional(),
+    reps: z.number().int().positive().optional(),
+    durationSeconds: z.number().int().positive().optional(),
+    side: z.enum(['LEFT', 'RIGHT', 'BILATERAL']).optional(),
+    rpe: z.number().min(1).max(10).optional(),
+    rir: z.number().min(0).max(10).optional(),
+    setType: z.enum(['NORMAL', 'WARMUP', 'DROPSET', 'FAILURE', 'MYOREPS']).optional(),
+    note: z.string().max(500).optional(),
+  })
+  .strict();
+
+export type CorrectStrengthSetInput = z.infer<typeof CorrectStrengthSetSchema>;

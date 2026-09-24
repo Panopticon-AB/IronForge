@@ -1,20 +1,18 @@
 import {
   CanonicalStrengthSetSchema,
+  CorrectStrengthSetSchema,
   type CanonicalStrengthSet,
   type CanonicalStrengthSetInput,
+  type CorrectStrengthSetInput,
   type MeasurementMode,
 } from '@/features/strength-evidence/write-contract';
 import type { StrengthTemplateDefinition } from '@/features/training/canonicalTemplates';
 import { snapshotTemplateForSession } from '@/features/training/canonicalTemplates';
 import { IdempotentSetWriter } from '@/features/strength-evidence/write-service';
+import type { SessionStatus, SessionOutcome } from './domain';
 
-export type LiveForgeSessionStatus = 'ACTIVE' | 'PAUSED' | 'COMPLETED' | 'ABANDONED';
-
-export type LiveForgeSessionOutcome =
-  | 'FULL_CLEAR'
-  | 'MINIMUM_CLEAR'
-  | 'KLAR_FOR_IDAG' // Quit smart / finished partial session
-  | 'ABANDONED';
+export type LiveForgeSessionStatus = SessionStatus;
+export type LiveForgeSessionOutcome = SessionOutcome;
 
 export interface PerformedExerciseState {
   exerciseId: string;
@@ -173,12 +171,20 @@ export class LiveStrengthSessionManager {
 
   /**
    * Correct an already recorded set by its clientWriteId.
+   * Identity fields (id, clientWriteId, performedExerciseId, createdAt) are strictly immutable.
    */
   correctSet(
     session: ActiveStrengthSession,
     clientWriteId: string,
-    corrections: Partial<CanonicalStrengthSetInput>
+    corrections: CorrectStrengthSetInput
   ): ActiveStrengthSession {
+    const validatedCorrection = CorrectStrengthSetSchema.safeParse(corrections);
+    if (!validatedCorrection.success) {
+      throw new Error(
+        `Invalid correction fields: ${validatedCorrection.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')}`
+      );
+    }
+
     let found = false;
     const now = new Date().toISOString();
 
@@ -192,7 +198,12 @@ export class LiveStrengthSessionManager {
 
       const mergedCandidate = {
         ...target,
-        ...corrections,
+        ...validatedCorrection.data,
+        id: target.id,
+        clientWriteId: target.clientWriteId,
+        performedExerciseId: target.performedExerciseId,
+        completedAt: target.completedAt,
+        createdAt: target.createdAt,
         updatedAt: now,
       };
 

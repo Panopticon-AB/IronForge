@@ -115,6 +115,21 @@ describe('LiveStrengthSessionManager', () => {
     // Negative loads or invalid schemas must be rejected
     expect(() => {
       manager.correctSet(session, 'cw-bs-1', { load: -50 });
-    }).toThrow(/Invalid set correction/);
+    }).toThrow(/Invalid correction fields/);
+
+    // Attempting to mutate identity fields (id, clientWriteId, etc.) must be rejected
+    expect(() => {
+      manager.correctSet(session, 'cw-bs-1', {
+        load: 95,
+        id: 'tampered-id',
+      } as any);
+    }).toThrow(/Invalid correction fields/);
+
+    expect(() => {
+      manager.correctSet(session, 'cw-bs-1', {
+        load: 95,
+        clientWriteId: 'tampered-clientWriteId',
+      } as any);
+    }).toThrow(/Invalid correction fields/);
   });
 });

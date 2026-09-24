@@ -94,4 +94,89 @@ describe('prepareStrengthEvidencePersistence', () => {
     upsertSpy.mockRestore();
     findUniqueSpy.mockRestore();
   });
+
+  it('persistCanonicalStrengthSet persists initial set and ignores duplicate clientWriteId', async () => {
+    const { persistCanonicalStrengthSet } = await import('./persistence');
+    const prismaModule = await import('@/lib/prisma');
+    const prisma = prismaModule.default;
+
+    const setInput = {
+      id: 'set-1',
+      performedExerciseId: 'ex-1',
+      clientWriteId: 'cw-1',
+      measurementMode: 'LOAD_AND_REPS' as const,
+      load: 100,
+      loadUnit: 'KG' as const,
+      loadSemantics: 'TOTAL_EXTERNAL_LOAD' as const,
+      reps: 8,
+      completedAt: '2026-09-24T18:00:00.000Z',
+      setType: 'NORMAL' as const,
+    };
+
+    // First write: row does not exist
+    const findUniqueSpy = vi
+      .spyOn(prisma.strengthEvidenceSession, 'findUnique')
+      .mockResolvedValueOnce(null as any);
+    const upsertSpy = vi
+      .spyOn(prisma.strengthEvidenceSession, 'upsert')
+      .mockResolvedValue({ id: 'row-1' } as any);
+
+    const res1 = await persistCanonicalStrengthSet(
+      'user-1',
+      'IRONFORGE_LIVE_FORGE',
+      'sess-1',
+      0,
+      'Belt Squat',
+      'ex-1',
+      setInput
+    );
+    expect(res1.status).toBe('PERSISTED');
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
+
+    // Second write: row exists with this clientWriteId in evidence
+    const existingEvidence: StrengthSessionEvidence = {
+      provenance: { source: 'IRONFORGE_LIVE_FORGE' as any, providerSessionId: 'sess-1' },
+      startedAt: '2026-09-24T18:00:00.000Z',
+      exercises: [
+        {
+          sequence: 0,
+          exerciseName: 'Belt Squat',
+          providerExerciseId: 'ex-1',
+          sets: [
+            {
+              sequence: 0,
+              providerSetIndex: 0,
+              clientWriteId: 'cw-1',
+              load: 100,
+              loadKg: 100,
+              loadUnit: 'KG',
+              loadSemantics: 'TOTAL_EXTERNAL_LOAD',
+              reps: 8,
+              measurementMode: 'LOAD_AND_REPS',
+            },
+          ],
+        },
+      ],
+    };
+
+    findUniqueSpy.mockResolvedValueOnce({
+      id: 'row-1',
+      evidence: existingEvidence as any,
+    } as any);
+
+    const res2 = await persistCanonicalStrengthSet(
+      'user-1',
+      'IRONFORGE_LIVE_FORGE',
+      'sess-1',
+      0,
+      'Belt Squat',
+      'ex-1',
+      setInput
+    );
+    expect(res2.status).toBe('DUPLICATE_IGNORED');
+
+    upsertSpy.mockRestore();
+    findUniqueSpy.mockRestore();
+  });
 });
+
