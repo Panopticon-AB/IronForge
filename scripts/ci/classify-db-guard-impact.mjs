@@ -1,6 +1,5 @@
 import { appendFileSync, readFileSync } from 'node:fs';
 
-const exactDatabaseGuardPaths = new Set(['prisma/schema.prisma']);
 const databaseGuardPrefixes = ['prisma/migrations/'];
 
 export function normalizeRepositoryPath(value) {
@@ -41,7 +40,7 @@ export function isDatabaseGuardPath(value) {
   }
 
   return (
-    exactDatabaseGuardPaths.has(repositoryPath) ||
+    (repositoryPath.startsWith('prisma/') && repositoryPath.endsWith('.prisma')) ||
     databaseGuardPrefixes.some((prefix) => repositoryPath.startsWith(prefix))
   );
 }
