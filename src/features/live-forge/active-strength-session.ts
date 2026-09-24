@@ -1,13 +1,10 @@
-import type {
-  CanonicalStrengthSet,
-  CanonicalStrengthSetInput,
-  MeasurementMode,
-  SetSide,
+import {
+  CanonicalStrengthSetSchema,
+  type CanonicalStrengthSet,
+  type CanonicalStrengthSetInput,
+  type MeasurementMode,
 } from '@/features/strength-evidence/write-contract';
-import type {
-  StrengthTemplateDefinition,
-  TemplateExerciseDefinition,
-} from '@/features/training/canonicalTemplates';
+import type { StrengthTemplateDefinition } from '@/features/training/canonicalTemplates';
 import { snapshotTemplateForSession } from '@/features/training/canonicalTemplates';
 import { IdempotentSetWriter } from '@/features/strength-evidence/write-service';
 
@@ -193,9 +190,22 @@ export class LiveStrengthSessionManager {
       const updatedSets = [...ex.sets];
       const target = updatedSets[setIdx];
 
-      updatedSets[setIdx] = {
+      const mergedCandidate = {
         ...target,
         ...corrections,
+        updatedAt: now,
+      };
+
+      const parsed = CanonicalStrengthSetSchema.safeParse(mergedCandidate);
+      if (!parsed.success) {
+        throw new Error(
+          `Invalid set correction: ${parsed.error.issues.map((i) => `${i.path.join('.')}: ${i.message}`).join(', ')}`
+        );
+      }
+
+      updatedSets[setIdx] = {
+        ...parsed.data,
+        createdAt: target.createdAt,
         updatedAt: now,
       };
 

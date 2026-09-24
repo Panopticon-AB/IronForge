@@ -1,5 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react';
-import React from 'react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import { describe, expect, it, vi } from 'vitest';
 import { MobileStrengthLogger } from './MobileStrengthLogger';
 import type { PerformedExerciseState } from '@/features/live-forge/active-strength-session';
@@ -83,7 +82,9 @@ describe('MobileStrengthLogger', () => {
     fireEvent.change(screen.getByLabelText(/Vikt \(kg\)/i), { target: { value: '85' } });
     fireEvent.change(screen.getByLabelText(/Reps/i), { target: { value: '8' } });
 
-    fireEvent.click(screen.getByTestId('save-set-button'));
+    await act(async () => {
+      fireEvent.click(screen.getByTestId('save-set-button'));
+    });
 
     expect(handleSaveSet).toHaveBeenCalledTimes(1);
     const setArg = handleSaveSet.mock.calls[0][0];

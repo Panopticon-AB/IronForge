@@ -1,13 +1,13 @@
 'use client';
 
-import React, { useState } from 'react';
+import { useState } from 'react';
 import type { PerformedExerciseState } from '@/features/live-forge/active-strength-session';
 import type {
   CanonicalStrengthSetInput,
   MeasurementMode,
   SetSide,
 } from '@/features/strength-evidence/write-contract';
-import { Dumbbell, Clock, Check, ArrowRight, X } from 'lucide-react';
+import { Dumbbell, Check, ArrowRight, X } from 'lucide-react';
 
 interface MobileStrengthLoggerProps {
   exercise: PerformedExerciseState;
@@ -19,6 +19,13 @@ interface MobileStrengthLoggerProps {
   onPreviousExercise: () => void;
   previousPerformance?: { load?: number; reps?: number } | null;
   isSaving?: boolean;
+}
+
+function generateClientWriteId(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return `write-${Date.now()}-${Math.random()}`;
 }
 
 export function MobileStrengthLogger({
@@ -51,28 +58,28 @@ export function MobileStrengthLogger({
   const [showRpeInput, setShowRpeInput] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // Maintain a stable clientWriteId per pending set attempt
+  const [pendingClientWriteId, setPendingClientWriteId] = useState<string>(() =>
+    generateClientWriteId()
+  );
+
   const nextSetNumber = exercise.sets.length + 1;
 
   async function handleSaveSet() {
     setErrorMessage(null);
 
-    const clientWriteId =
-      typeof crypto !== 'undefined' && crypto.randomUUID
-        ? crypto.randomUUID()
-        : 'write-' + Date.now() + '-' + Math.random();
-
     const setInput: CanonicalStrengthSetInput = {
-      id: 'set-' + Date.now(),
+      id: `set-${Date.now()}`,
       performedExerciseId: exercise.exerciseId,
-      clientWriteId,
+      clientWriteId: pendingClientWriteId,
       measurementMode: mode,
       completedAt: new Date().toISOString(),
       setType: 'NORMAL',
     };
 
     if (isWeighted) {
-      const parsedLoad = parseFloat(load);
-      if (isNaN(parsedLoad) || parsedLoad < 0) {
+      const parsedLoad = Number.parseFloat(load);
+      if (Number.isNaN(parsedLoad) || parsedLoad < 0) {
         setErrorMessage('Ange en giltig belastning (kg)');
         return;
       }
@@ -82,8 +89,8 @@ export function MobileStrengthLogger({
     }
 
     if (hasReps) {
-      const parsedReps = parseInt(reps, 10);
-      if (isNaN(parsedReps) || parsedReps <= 0) {
+      const parsedReps = Number.parseInt(reps, 10);
+      if (Number.isNaN(parsedReps) || parsedReps <= 0) {
         setErrorMessage('Ange antal reps');
         return;
       }
@@ -91,8 +98,8 @@ export function MobileStrengthLogger({
     }
 
     if (hasDuration) {
-      const parsedDuration = parseInt(duration, 10);
-      if (isNaN(parsedDuration) || parsedDuration <= 0) {
+      const parsedDuration = Number.parseInt(duration, 10);
+      if (Number.isNaN(parsedDuration) || parsedDuration <= 0) {
         setErrorMessage('Ange sekunder');
         return;
       }
@@ -105,14 +112,16 @@ export function MobileStrengthLogger({
 
     // Optional RPE: unknown stays undefined / null
     if (rpe.trim() !== '') {
-      const parsedRpe = parseFloat(rpe);
-      if (!isNaN(parsedRpe) && parsedRpe >= 1 && parsedRpe <= 10) {
+      const parsedRpe = Number.parseFloat(rpe);
+      if (!Number.isNaN(parsedRpe) && parsedRpe >= 1 && parsedRpe <= 10) {
         setInput.rpe = parsedRpe;
       }
     }
 
     try {
       await onSaveSet(setInput);
+      // Upon successful save, regenerate the clientWriteId for the next set
+      setPendingClientWriteId(generateClientWriteId());
       // Toggle side for next unilateral set
       if (isUnilateral) {
         setSide((prev) => (prev === 'LEFT' ? 'RIGHT' : 'LEFT'));
@@ -264,8 +273,11 @@ export function MobileStrengthLogger({
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <label className="text-xs font-mono text-zinc-400">RPE (1-10):</label>
+              <label htmlFor="input-rpe" className="text-xs font-mono text-zinc-400">
+                RPE (1-10):
+              </label>
               <input
+                id="input-rpe"
                 type="number"
                 inputMode="decimal"
                 step="0.5"

@@ -1,4 +1,4 @@
-import type { MeasurementMode, SetSide, SetType } from '@/features/strength-evidence/write-contract';
+import type { MeasurementMode } from '@/features/strength-evidence/write-contract';
 
 export interface TemplateSetPrescription {
   targetRepsMin?: number;

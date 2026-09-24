@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import type { StrengthSessionEvidence } from './domain';
 import {
@@ -63,5 +63,35 @@ describe('prepareStrengthEvidencePersistence', () => {
 
     expect('rpe' in firstSet).toBe(false);
     expect('rir' in firstSet).toBe(false);
+  });
+
+  it('persists and reads back session evidence through prisma', async () => {
+    const { persistStrengthSessionEvidence, getStrengthSessionEvidence } = await import(
+      './persistence'
+    );
+    const prismaModule = await import('@/lib/prisma');
+    const prisma = prismaModule.default;
+
+    const upsertSpy = vi.spyOn(prisma.strengthEvidenceSession, 'upsert').mockResolvedValue({
+      id: 'db-row-1',
+    } as any);
+
+    const findUniqueSpy = vi
+      .spyOn(prisma.strengthEvidenceSession, 'findUnique')
+      .mockResolvedValue({
+        id: 'db-row-1',
+        evidence: evidence as any,
+      } as any);
+
+    const persistRes = await persistStrengthSessionEvidence('user-1', evidence);
+    expect(persistRes.status).toBe('PERSISTED');
+    expect(upsertSpy).toHaveBeenCalledTimes(1);
+
+    const readBack = await getStrengthSessionEvidence('user-1', 'HEVY', 'hevy-workout-123');
+    expect(readBack).toEqual(evidence);
+    expect(findUniqueSpy).toHaveBeenCalledTimes(1);
+
+    upsertSpy.mockRestore();
+    findUniqueSpy.mockRestore();
   });
 });

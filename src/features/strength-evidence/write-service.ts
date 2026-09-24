@@ -1,10 +1,8 @@
-import type { Prisma } from '@prisma/client';
 import {
   CanonicalStrengthSetSchema,
   type CanonicalStrengthSetInput,
   type ValidatedCanonicalStrengthSet,
 } from './write-contract';
-import { prepareStrengthEvidencePersistence } from './persistence';
 import type { StrengthSessionEvidence } from './domain';
 
 export interface StrengthSessionWritePayload {
@@ -50,6 +48,8 @@ export function validateCanonicalStrengthSet(input: unknown): {
 /**
  * Maps a completed or in-progress Live Forge session with canonical sets
  * into canonical StrengthSessionEvidence ready for persistence.
+ * Truthfully preserves load, loadUnit, loadSemantics, measurementMode, side,
+ * and clientWriteId without lossy collapse.
  */
 export function toCanonicalStrengthSessionEvidence(
   payload: StrengthSessionWritePayload
@@ -72,15 +72,33 @@ export function toCanonicalStrengthSessionEvidence(
       ...(ex.setupMode ? { setupMode: ex.setupMode } : {}),
       sets: ex.sets.map((s, idx) => {
         const validated = CanonicalStrengthSetSchema.parse(s);
+        const loadKg =
+          validated.load !== undefined
+            ? validated.loadUnit === 'LBS'
+              ? Number((validated.load * 0.45359237).toFixed(2))
+              : validated.load
+            : undefined;
+
         return {
           sequence: idx,
           providerSetIndex: idx,
-          ...(validated.load !== undefined ? { loadKg: validated.load } : {}),
+          clientWriteId: validated.clientWriteId,
+          measurementMode: validated.measurementMode,
+          ...(validated.load !== undefined ? { load: validated.load } : {}),
+          ...(validated.loadUnit !== undefined ? { loadUnit: validated.loadUnit } : {}),
+          ...(validated.loadSemantics !== undefined
+            ? { loadSemantics: validated.loadSemantics }
+            : {}),
+          ...(loadKg !== undefined ? { loadKg } : {}),
           ...(validated.reps !== undefined ? { reps: validated.reps } : {}),
-          ...(validated.durationSeconds !== undefined ? { durationSeconds: validated.durationSeconds } : {}),
+          ...(validated.durationSeconds !== undefined
+            ? { durationSeconds: validated.durationSeconds }
+            : {}),
+          ...(validated.side !== undefined ? { side: validated.side } : {}),
           ...(validated.rpe !== undefined ? { rpe: validated.rpe } : {}),
           ...(validated.rir !== undefined ? { rir: validated.rir } : {}),
           ...(validated.loadSemantics === 'BODYWEIGHT' ? { isBodyweight: true } : {}),
+          ...(validated.note !== undefined ? { note: validated.note } : {}),
         };
       }),
     })),

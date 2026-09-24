@@ -111,5 +111,10 @@ describe('LiveStrengthSessionManager', () => {
     // User realized they did 100 kg instead of 90 kg
     session = manager.correctSet(session, 'cw-bs-1', { load: 100 });
     expect(session.performedExercises[0].sets[0].load).toBe(100);
+
+    // Negative loads or invalid schemas must be rejected
+    expect(() => {
+      manager.correctSet(session, 'cw-bs-1', { load: -50 });
+    }).toThrow(/Invalid set correction/);
   });
 });

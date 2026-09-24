@@ -88,3 +88,23 @@ export async function persistStrengthSessionEvidence(
 
   return { status: 'PERSISTED', id: row.id };
 }
+
+export async function getStrengthSessionEvidence(
+  userId: string,
+  source: string,
+  providerSessionId: string
+): Promise<StrengthSessionEvidence | null> {
+  const row = await prisma.strengthEvidenceSession.findUnique({
+    where: {
+      userId_source_providerSessionId: {
+        userId,
+        source,
+        providerSessionId,
+      },
+    },
+    select: { evidence: true },
+  });
+
+  if (!row?.evidence) return null;
+  return row.evidence as unknown as StrengthSessionEvidence;
+}

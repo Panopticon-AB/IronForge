@@ -124,13 +124,21 @@ describe('Gate 1 A1 Vertical Slice (phone -> session -> exercise -> set -> persi
     // Verify Belt Squat sets
     expect(evidence.exercises[0].sets).toHaveLength(2);
     expect(evidence.exercises[0].sets[0].loadKg).toBe(85);
+    expect(evidence.exercises[0].sets[0].load).toBe(85);
+    expect(evidence.exercises[0].sets[0].loadUnit).toBe('KG');
+    expect(evidence.exercises[0].sets[0].loadSemantics).toBe('TOTAL_EXTERNAL_LOAD');
+    expect(evidence.exercises[0].sets[0].clientWriteId).toBe('cw-bs-1');
+    expect(evidence.exercises[0].sets[0].measurementMode).toBe('LOAD_AND_REPS');
     expect(evidence.exercises[0].sets[0].rpe).toBe(8);
     expect(evidence.exercises[0].sets[1].loadKg).toBe(85);
+    expect(evidence.exercises[0].sets[1].load).toBe(85);
     expect('rpe' in evidence.exercises[0].sets[1]).toBe(false); // Unknown RPE remains missing!
 
     // Verify Ab wheel (reps only)
     expect(evidence.exercises[2].sets[0].reps).toBe(10);
+    expect(evidence.exercises[2].sets[0].measurementMode).toBe('REPS_ONLY');
     expect('loadKg' in evidence.exercises[2].sets[0]).toBe(false);
+    expect('load' in evidence.exercises[2].sets[0]).toBe(false);
 
     // 7. Verify prepareStrengthEvidencePersistence is ready for DB insertion
     const prepared = prepareStrengthEvidencePersistence('user-titan-1', evidence);

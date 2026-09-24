@@ -127,9 +127,14 @@ describe('write-service', () => {
       expect(evidence.provenance.providerSessionId).toBe('session-a1-123');
       expect(evidence.exercises).toHaveLength(2);
 
-      // Belt squat set has loadKg, reps, rpe
+      // Belt squat set has loadKg, reps, rpe, load, loadUnit, loadSemantics, clientWriteId
       expect(evidence.exercises[0].sets[0]).toMatchObject({
         loadKg: 80,
+        load: 80,
+        loadUnit: 'KG',
+        loadSemantics: 'TOTAL_EXTERNAL_LOAD',
+        clientWriteId: 'cw-1',
+        measurementMode: 'LOAD_AND_REPS',
         reps: 8,
         rpe: 8,
       });
@@ -137,7 +142,10 @@ describe('write-service', () => {
       // Ab wheel set has reps only; no manufactured rpe, loadKg is absent
       const abWheelSet = evidence.exercises[1].sets[0];
       expect(abWheelSet.reps).toBe(10);
+      expect(abWheelSet.clientWriteId).toBe('cw-2');
+      expect(abWheelSet.measurementMode).toBe('REPS_ONLY');
       expect('loadKg' in abWheelSet).toBe(false);
+      expect('load' in abWheelSet).toBe(false);
       expect('rpe' in abWheelSet).toBe(false);
     });
   });
