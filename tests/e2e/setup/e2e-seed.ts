@@ -117,165 +117,169 @@ async function main() {
     // 0. Wait for Auth service to be ready
     console.log('📡 Waiting for Supabase Auth service to be ready...');
     let authReady = false;
-    let authRetries = 10;
+    let authRetries = 3;
     while (authRetries > 0 && !authReady) {
       authReady = await checkSupabaseHealth(supabaseUrl);
       if (!authReady) {
         authRetries--;
         if (authRetries === 0) {
-          console.error('❌ Supabase Auth service not ready after all retries.');
+          console.warn(
+            '⚠️ Supabase Auth service not ready or offline. Skipping Supabase Auth sync.'
+          );
         } else {
-          await new Promise((r) => setTimeout(r, 3000));
+          await new Promise((r) => setTimeout(r, 1000));
         }
       }
     }
 
-    // Try to get existing user with robust error handling
-    let users: any[] = [];
-    try {
-      const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
-      if (listError) throw listError;
-      users = usersData.users;
-    } catch (err: any) {
-      console.error(`❌ Failed to list users: ${err.message}`);
+    if (authReady) {
+      // Try to get existing user with robust error handling
+      let users: any[] = [];
+      try {
+        const { data: usersData, error: listError } = await supabaseAdmin.auth.admin.listUsers();
+        if (listError) throw listError;
+        users = usersData.users;
+      } catch (err: any) {
+        console.error(`❌ Failed to list users: ${err.message}`);
 
-      if (err.code === 'bad_jwt' || err.message?.includes('invalid JWT')) {
-        console.warn(
-          '⚠️ Service role key is not valid for this local Supabase instance. Falling back to password signup/signin.'
-        );
+        if (err.code === 'bad_jwt' || err.message?.includes('invalid JWT')) {
+          console.warn(
+            '⚠️ Service role key is not valid for this local Supabase instance. Falling back to password signup/signin.'
+          );
 
-        if (!anonKey) {
-          throw err;
-        }
+          if (!anonKey) {
+            throw err;
+          }
 
-        const supabaseAuth = createClient(supabaseUrl, anonKey, {
-          auth: {
-            autoRefreshToken: false,
-            persistSession: false,
-          },
-        });
-
-        const signUpTestUser = () =>
-          supabaseAuth.auth.signUp({
-            email: testEmail,
-            password: testPassword,
-            options: { data: { heroName: 'E2E Hunter' } },
+          const supabaseAuth = createClient(supabaseUrl, anonKey, {
+            auth: {
+              autoRefreshToken: false,
+              persistSession: false,
+            },
           });
 
-        const { data: signUpData, error: signUpError } = await signUpTestUser();
-
-        let fallbackUser = signUpData.user;
-        let fallbackError = signUpError;
-
-        if (!fallbackUser && signUpError?.message?.includes('User already registered')) {
-          console.warn(
-            '⚠️ Existing auth user has unknown password. Removing stale local auth row and retrying signup.'
-          );
-          const removed = await removeLocalAuthUser(testEmail);
-          if (removed) {
-            const { data: retryData, error: retryError } = await signUpTestUser();
-            fallbackUser = retryData.user;
-            fallbackError = retryError;
-          } else {
-            const generatedEmail = uniqueEmailFor(testEmail);
-            console.warn('⚠️ Could not remove stale auth user. Creating isolated E2E user.');
-            testEmail = generatedEmail;
-            const { data: retryData, error: retryError } = await signUpTestUser();
-            fallbackUser = retryData.user;
-            fallbackError = retryError;
-          }
-        }
-
-        if (fallbackUser) {
-          userId = fallbackUser.id;
-          usedPasswordAuthFallback = true;
-          await writeE2ECredentials(testEmail, testPassword);
-          console.log(`✅ Created Supabase Auth User ID via signup: ${userId}`);
-        } else if (fallbackError) {
-          console.warn(`⚠️ Signup fallback did not create user: ${fallbackError.message}`);
-          const { data: signInData, error: signInError } =
-            await supabaseAuth.auth.signInWithPassword({
+          const signUpTestUser = () =>
+            supabaseAuth.auth.signUp({
               email: testEmail,
               password: testPassword,
+              options: { data: { heroName: 'E2E Hunter' } },
             });
 
-          if (signInError || !signInData.user) {
-            throw signInError || fallbackError;
+          const { data: signUpData, error: signUpError } = await signUpTestUser();
+
+          let fallbackUser = signUpData.user;
+          let fallbackError = signUpError;
+
+          if (!fallbackUser && signUpError?.message?.includes('User already registered')) {
+            console.warn(
+              '⚠️ Existing auth user has unknown password. Removing stale local auth row and retrying signup.'
+            );
+            const removed = await removeLocalAuthUser(testEmail);
+            if (removed) {
+              const { data: retryData, error: retryError } = await signUpTestUser();
+              fallbackUser = retryData.user;
+              fallbackError = retryError;
+            } else {
+              const generatedEmail = uniqueEmailFor(testEmail);
+              console.warn('⚠️ Could not remove stale auth user. Creating isolated E2E user.');
+              testEmail = generatedEmail;
+              const { data: retryData, error: retryError } = await signUpTestUser();
+              fallbackUser = retryData.user;
+              fallbackError = retryError;
+            }
           }
 
-          userId = signInData.user.id;
-          usedPasswordAuthFallback = true;
-          await writeE2ECredentials(testEmail, testPassword);
-          console.log(`✅ Found Supabase Auth User ID via signin: ${userId}`);
+          if (fallbackUser) {
+            userId = fallbackUser.id;
+            usedPasswordAuthFallback = true;
+            await writeE2ECredentials(testEmail, testPassword);
+            console.log(`✅ Created Supabase Auth User ID via signup: ${userId}`);
+          } else if (fallbackError) {
+            console.warn(`⚠️ Signup fallback did not create user: ${fallbackError.message}`);
+            const { data: signInData, error: signInError } =
+              await supabaseAuth.auth.signInWithPassword({
+                email: testEmail,
+                password: testPassword,
+              });
+
+            if (signInError || !signInData.user) {
+              throw signInError || fallbackError;
+            }
+
+            userId = signInData.user.id;
+            usedPasswordAuthFallback = true;
+            await writeE2ECredentials(testEmail, testPassword);
+            console.log(`✅ Found Supabase Auth User ID via signin: ${userId}`);
+          }
         }
-      }
 
-      if (userId) {
-        users = [{ id: userId, email: testEmail }];
-      } else {
-        // CRITICAL DEBUG: If we get a JSON parse error (Unexpected token <),
-        // it means we got HTML. Let's try to see what that HTML is.
-        if (err.message?.includes('Unexpected token') || err.message?.includes('JSON')) {
-          console.error('DEBUG: Supabase Auth returned invalid JSON. Possible HTML error page.');
-          try {
-            const debugResp = await fetch(`${supabaseUrl}/auth/v1/health`);
-            const text = await debugResp.text();
-            console.error(`DEBUG: Health Check Status: ${debugResp.status}`);
-            console.error(`DEBUG: Health Check Body: ${text.substring(0, 1000)}`);
-
-            const adminResp = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
-              headers: { Authorization: `Bearer ${serviceKey}` },
-            });
-            const adminText = await adminResp.text();
-            console.error(`DEBUG: Admin Users Status: ${adminResp.status}`);
-            console.error(`DEBUG: Admin Users Body: ${adminText.substring(0, 1000)}`);
-          } catch (debugErr) {
-            console.error(`DEBUG: Failed to fetch additional debug info: ${debugErr}`);
-          }
-        }
-        throw err; // Re-throw to fail the setup properly
-      }
-    }
-
-    const existingAuthUser = users.find((u) => u.email === testEmail);
-    if (existingAuthUser) {
-      userId = existingAuthUser.id;
-      console.log(`✅ Found existing Supabase Auth User ID: ${userId}`);
-
-      // Reset password to ensure it matches TEST_USER_PASSWORD
-      if (usedPasswordAuthFallback) {
-        console.log('✅ Password already set by password-auth fallback.');
-      } else {
-        console.log(`👤 Resetting password for ${testEmail} to ensure consistency...`);
-        const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
-          existingAuthUser.id,
-          {
-            password: testPassword!,
-          }
-        );
-        if (updateError) {
-          console.warn(`⚠️ Failed to update password: ${updateError.message}`);
+        if (userId) {
+          users = [{ id: userId, email: testEmail }];
         } else {
-          console.log('✅ Password reset successfully.');
+          // CRITICAL DEBUG: If we get a JSON parse error (Unexpected token <),
+          // it means we got HTML. Let's try to see what that HTML is.
+          if (err.message?.includes('Unexpected token') || err.message?.includes('JSON')) {
+            console.error('DEBUG: Supabase Auth returned invalid JSON. Possible HTML error page.');
+            try {
+              const debugResp = await fetch(`${supabaseUrl}/auth/v1/health`);
+              const text = await debugResp.text();
+              console.error(`DEBUG: Health Check Status: ${debugResp.status}`);
+              console.error(`DEBUG: Health Check Body: ${text.substring(0, 1000)}`);
+
+              const adminResp = await fetch(`${supabaseUrl}/auth/v1/admin/users`, {
+                headers: { Authorization: `Bearer ${serviceKey}` },
+              });
+              const adminText = await adminResp.text();
+              console.error(`DEBUG: Admin Users Status: ${adminResp.status}`);
+              console.error(`DEBUG: Admin Users Body: ${adminText.substring(0, 1000)}`);
+            } catch (debugErr) {
+              console.error(`DEBUG: Failed to fetch additional debug info: ${debugErr}`);
+            }
+          }
+          throw err; // Re-throw to fail the setup properly
         }
       }
-    } else {
-      console.log(`👤 User ${testEmail} not found. Creating via Admin API...`);
-      const {
-        data: { user },
-        error: createError,
-      } = await supabaseAdmin.auth.admin.createUser({
-        email: testEmail,
-        password: testPassword,
-        email_confirm: true,
-        user_metadata: { heroName: 'E2E Hunter' },
-      });
 
-      if (createError) {
-        console.error(`❌ Failed to create auth user: ${createError.message}`);
-      } else if (user) {
-        userId = user.id;
-        console.log(`✅ Created Supabase Auth User ID: ${userId}`);
+      const existingAuthUser = users.find((u) => u.email === testEmail);
+      if (existingAuthUser) {
+        userId = existingAuthUser.id;
+        console.log(`✅ Found existing Supabase Auth User ID: ${userId}`);
+
+        // Reset password to ensure it matches TEST_USER_PASSWORD
+        if (usedPasswordAuthFallback) {
+          console.log('✅ Password already set by password-auth fallback.');
+        } else {
+          console.log(`👤 Resetting password for ${testEmail} to ensure consistency...`);
+          const { error: updateError } = await supabaseAdmin.auth.admin.updateUserById(
+            existingAuthUser.id,
+            {
+              password: testPassword!,
+            }
+          );
+          if (updateError) {
+            console.warn(`⚠️ Failed to update password: ${updateError.message}`);
+          } else {
+            console.log('✅ Password reset successfully.');
+          }
+        }
+      } else {
+        console.log(`👤 User ${testEmail} not found. Creating via Admin API...`);
+        const {
+          data: { user },
+          error: createError,
+        } = await supabaseAdmin.auth.admin.createUser({
+          email: testEmail,
+          password: testPassword,
+          email_confirm: true,
+          user_metadata: { heroName: 'E2E Hunter' },
+        });
+
+        if (createError) {
+          console.error(`❌ Failed to create auth user: ${createError.message}`);
+        } else if (user) {
+          userId = user.id;
+          console.log(`✅ Created Supabase Auth User ID: ${userId}`);
+        }
       }
     }
   } else {

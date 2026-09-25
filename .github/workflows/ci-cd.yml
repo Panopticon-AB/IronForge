@@ -257,6 +257,82 @@ jobs:
             Write-Host "⚠️ N8N_CI_TRIAGE_WEBHOOK_URL not set. Skipping Active Handover."
           }
 
+  # ==================================================================
+  # GATE 1: MOBILE VERTICAL SLICE ACCEPTANCE (PR MERGE GATE)
+  # Proves the real mobile browser flow and network retry on PR head
+  # ==================================================================
+  gate1-mobile-acceptance:
+    name: "🎭 Gate 1 Mobile Acceptance"
+    needs: [classify-pr-impact]
+    if: >-
+      (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/fix/')) &&
+      needs.classify-pr-impact.outputs.run-l1 == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      IRONFORGE_E2E_SKIP_GLOBAL_SETUP: 'true'
+      IRONFORGE_E2E_MODE: 'true'
+      IRONFORGE_E2E_USER_ID: 'e2e-gate1-user'
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
+      DIRECT_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54421
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: local-ci-placeholder
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3001
+      SKIP_ENV_VALIDATION: 'true'
+      # Explicitly shadow all inherited repository-secret variables
+      SUPABASE_SERVICE_KEY: ''
+      SUPABASE_ACCESS_TOKEN: ''
+      GH_PAT: ''
+      INTERVALS_API_KEY: ''
+      INTERVALS_ATHLETE_ID: ''
+      FIGMA_API_KEY: ''
+      N8N_API_KEY: ''
+      N8N_HOST: ''
+      PROMPTS_CHAT_API_KEY: ''
+      COOLIFY_API_KEY: ''
+      SENTRY_AUTH_TOKEN: ''
+      SENTRY_ORG: ''
+      SENTRY_PROJECT: ''
+      PERPLEXITY_API_KEY: ''
+      STRAVA_CLIENT_ID: ''
+      STRAVA_CLIENT_SECRET: ''
+      STRAVA_REFRESH_TOKEN: ''
+      GARMIN_EMAIL: ''
+      GARMIN_PASSWORD: ''
+      DISCORD_BOT_TOKEN: ''
+      NOTION_TOKEN: ''
+      N8N_CI_TRIAGE_WEBHOOK_URL: ''
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ironforge_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ironforge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ironforge
+        with:
+          tier: 'l1'
+          skip-managed-services: 'true'
+          skip-validation: 'true'
+      - name: Initialize DB (Gate 1)
+        run: npx prisma db push --accept-data-loss
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Gate 1 mobile acceptance tests
+        run: pnpm run test:gate1
 
   # ==================================================================
   # TIER L2: FULL VERIFICATION (MERGE)

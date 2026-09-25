@@ -6,7 +6,9 @@
         "DIRECT_URL",
         "NEXT_PUBLIC_SUPABASE_URL",
         "NEXT_PUBLIC_SUPABASE_ANON_KEY",
-        "GH_PAT"
+        "GH_PAT",
+        "IRONFORGE_E2E_MODE",
+        "IRONFORGE_E2E_USER_ID"
     ],
     "tasks": {
         "build": {
