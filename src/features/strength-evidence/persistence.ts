@@ -31,7 +31,7 @@ export type PreparedStrengthEvidencePersistence =
 
 export function prepareStrengthEvidencePersistence(
   userId: string,
-  evidence: StrengthSessionEvidence,
+  evidence: StrengthSessionEvidence
 ): PreparedStrengthEvidencePersistence {
   const providerSessionId = evidence.provenance.providerSessionId;
 
@@ -64,7 +64,7 @@ export type PersistStrengthEvidenceResult =
 
 export async function persistStrengthSessionEvidence(
   userId: string,
-  evidence: StrengthSessionEvidence,
+  evidence: StrengthSessionEvidence
 ): Promise<PersistStrengthEvidenceResult> {
   const prepared = prepareStrengthEvidencePersistence(userId, evidence);
 
@@ -162,7 +162,8 @@ export async function getStrengthSessionEvidence(
       measurementMode: setRow.measurementMode,
     };
     if (setRow.load !== null && setRow.load !== undefined) setItem.load = setRow.load;
-    if (setRow.loadUnit !== null && setRow.loadUnit !== undefined) setItem.loadUnit = setRow.loadUnit;
+    if (setRow.loadUnit !== null && setRow.loadUnit !== undefined)
+      setItem.loadUnit = setRow.loadUnit;
     if (setRow.loadSemantics !== null && setRow.loadSemantics !== undefined)
       setItem.loadSemantics = setRow.loadSemantics;
     if (setRow.loadKg !== null && setRow.loadKg !== undefined) setItem.loadKg = setRow.loadKg;
@@ -251,7 +252,6 @@ export type PersistCanonicalSetResult =
   | { status: 'DUPLICATE_IGNORED'; clientWriteId: string }
   | { status: 'INVALID_INPUT'; error: string };
 
-
 /**
  * Persists a canonical strength set into the database session evidence idempotently.
  * Guarantees that: same user/session + same clientWriteId -> exactly one canonical set.
@@ -305,25 +305,48 @@ export async function persistCanonicalStrengthSet(
     ],
   };
 
-  const sessionRow = await prisma.strengthEvidenceSession.upsert({
-    where: {
-      userId_source_providerSessionId: {
+  let sessionRow: { id: string };
+  try {
+    sessionRow = await prisma.strengthEvidenceSession.upsert({
+      where: {
+        userId_source_providerSessionId: {
+          userId,
+          source,
+          providerSessionId,
+        },
+      },
+      create: {
         userId,
         source,
         providerSessionId,
+        startedAt: new Date(sessionDefaults?.startedAt || validatedSet.completedAt),
+        evidenceVersion: STRENGTH_EVIDENCE_VERSION,
+        evidence: initialEvidence as unknown as Prisma.InputJsonValue,
       },
-    },
-    create: {
-      userId,
-      source,
-      providerSessionId,
-      startedAt: new Date(sessionDefaults?.startedAt || validatedSet.completedAt),
-      evidenceVersion: STRENGTH_EVIDENCE_VERSION,
-      evidence: initialEvidence as unknown as Prisma.InputJsonValue,
-    },
-    update: {},
-    select: { id: true },
-  });
+      update: {},
+      select: { id: true },
+    });
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      const existing = await prisma.strengthEvidenceSession.findUnique({
+        where: {
+          userId_source_providerSessionId: {
+            userId,
+            source,
+            providerSessionId,
+          },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        sessionRow = existing;
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
 
   // 2. Count existing sets for this exercise to determine set sequence
   const currentCount = await prisma.strengthEvidenceSet.count({
@@ -447,4 +470,3 @@ export async function persistCanonicalStrengthSet(
 
   return { status: 'PERSISTED', clientWriteId: validatedSet.clientWriteId, set: canonicalSet };
 }
-
