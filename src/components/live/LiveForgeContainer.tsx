@@ -1,17 +1,17 @@
 'use client';
 
-import { useState } from 'react';
+import { CheckCircle2, Dumbbell, History, Play } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
-import type { ActiveStrengthSession } from '@/features/live-forge/active-strength-session';
-import type { CanonicalStrengthSetInput } from '@/features/strength-evidence/write-contract';
-import { MobileStrengthLogger } from '@/components/logger/MobileStrengthLogger';
+import { useState } from 'react';
 import {
   finishStrengthSessionAction,
   logStrengthSetAction,
   startStrengthSessionAction,
 } from '@/actions/live-forge/core';
-import { Dumbbell, History, Play, Sparkles, CheckCircle2 } from 'lucide-react';
+import { MobileStrengthLogger } from '@/components/logger/MobileStrengthLogger';
+import type { ActiveStrengthSession } from '@/features/live-forge/active-strength-session';
+import type { CanonicalStrengthSetInput } from '@/features/strength-evidence/write-contract';
 
 interface LiveForgeContainerProps {
   initialSession: ActiveStrengthSession | null;
@@ -30,7 +30,7 @@ export function LiveForgeContainer({ initialSession }: LiveForgeContainerProps) 
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
   // If no active session, show the start workout picker (A1 prominent)
-  if (!session || session.status !== 'ACTIVE') {
+  if (session?.status !== 'ACTIVE') {
     return (
       <div className="flex flex-col min-h-[580px] max-w-sm mx-auto bg-zinc-950 text-white p-5 rounded-2xl border border-zinc-800 shadow-2xl justify-between">
         <div className="space-y-4">

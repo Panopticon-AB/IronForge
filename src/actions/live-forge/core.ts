@@ -1,22 +1,22 @@
 'use server';
 
-import prisma from '@/lib/prisma';
-import { createClient } from '@/utils/supabase/server';
-import {
-  type ActiveStrengthSession,
-  type PerformedExerciseState,
+import type {
+  ActiveStrengthSession,
+  PerformedExerciseState,
 } from '@/features/live-forge/active-strength-session';
+import type { StrengthSessionEvidence } from '@/features/strength-evidence/domain';
+import {
+  getCanonicalStrengthSets,
+  persistCanonicalStrengthSet,
+} from '@/features/strength-evidence/persistence';
+import type { CanonicalStrengthSetInput } from '@/features/strength-evidence/write-contract';
 import {
   CANONICAL_STRENGTH_TEMPLATES,
   type StrengthTemplateDefinition,
   snapshotTemplateForSession,
 } from '@/features/training/canonicalTemplates';
-import {
-  getCanonicalStrengthSets,
-  persistCanonicalStrengthSet,
-} from '@/features/strength-evidence/persistence';
-import type { StrengthSessionEvidence } from '@/features/strength-evidence/domain';
-import type { CanonicalStrengthSetInput } from '@/features/strength-evidence/write-contract';
+import prisma from '@/lib/prisma';
+import { createClient } from '@/utils/supabase/server';
 
 const LIVE_FORGE_SOURCE = 'IRONFORGE_LIVE_FORGE';
 
