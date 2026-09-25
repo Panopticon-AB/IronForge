@@ -6,9 +6,11 @@ export type SessionStatus =
 
 export type SessionOutcome =
   | 'STANDARD_CLEAR'
+  | 'FULL_CLEAR'
   | 'BOSS_CLEAR'
   | 'MINIMUM_CLEAR'
   | 'QUIT_SMART'
+  | 'KLAR_FOR_IDAG'
   | 'ABANDONED';
 
 export type RecommendationAction =

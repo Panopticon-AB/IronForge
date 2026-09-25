@@ -14,12 +14,24 @@ export interface StrengthEvidenceProvenance {
 export interface StrengthSetEvidence {
   sequence: number;
   providerSetIndex?: number;
+  clientWriteId?: string;
+  measurementMode?: 'LOAD_AND_REPS' | 'REPS_ONLY' | 'DURATION' | 'DURATION_AND_LOAD';
+  load?: number;
+  loadUnit?: 'KG' | 'LBS';
+  loadSemantics?:
+    | 'TOTAL_EXTERNAL_LOAD'
+    | 'ADDED_LOAD'
+    | 'PER_HAND'
+    | 'BODYWEIGHT'
+    | 'ASSISTED_BODYWEIGHT';
   loadKg?: number;
   reps?: number;
   durationSeconds?: number;
+  side?: 'LEFT' | 'RIGHT' | 'BILATERAL';
   rpe?: number;
   rir?: number;
   isBodyweight?: boolean;
+  note?: string;
 }
 
 export interface StrengthExerciseEvidence {

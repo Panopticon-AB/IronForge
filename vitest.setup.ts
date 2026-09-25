@@ -232,6 +232,26 @@ const mockPrisma = {
     upsert: vi.fn(),
     count: vi.fn(),
   },
+  strengthEvidenceSession: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn(),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    upsert: vi.fn(),
+    count: vi.fn(),
+  },
+  strengthEvidenceSet: {
+    findUnique: vi.fn(),
+    findFirst: vi.fn(),
+    findMany: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    update: vi.fn(),
+    delete: vi.fn(),
+    upsert: vi.fn(),
+    count: vi.fn().mockResolvedValue(0),
+  },
 };
 
 vi.mock('@/lib/prisma', () => ({
