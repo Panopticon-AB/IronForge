@@ -24,7 +24,9 @@ import { createClient } from '@/utils/supabase/server';
 const LIVE_FORGE_SOURCE = 'IRONFORGE_LIVE_FORGE';
 
 /**
- * Resolves the authenticated user ID or falls back to single-player active user.
+ * Resolves the authenticated user ID.
+ * In production, fails closed with UNAUTHORIZED if not authenticated via Supabase.
+ * In non-production E2E mode, provides deterministic isolated test user.
  */
 export async function resolveUserId(): Promise<string> {
   try {
@@ -34,28 +36,26 @@ export async function resolveUserId(): Promise<string> {
     } = await supabase.auth.getUser();
     if (user?.id) return user.id;
   } catch {
-    // Supabase auth not initialized or running in local dev / single player mode
+    // Supabase auth not initialized or unauthenticated
   }
 
-  const existingUser = await prisma.user.findFirst({
-    where: { heroName: 'IronLegend' },
-    select: { id: true },
-  });
+  // Non-production E2E test isolation bypass
+  if (process.env.NODE_ENV !== 'production' && process.env.IRONFORGE_E2E_MODE === 'true') {
+    const e2eUserId = process.env.IRONFORGE_E2E_USER_ID || 'e2e-gate1-user';
+    let user = await prisma.user.findUnique({
+      where: { id: e2eUserId },
+      select: { id: true },
+    });
+    if (!user) {
+      user = await prisma.user.create({
+        data: { id: e2eUserId, heroName: 'E2E Tester' },
+        select: { id: true },
+      });
+    }
+    return user.id;
+  }
 
-  if (existingUser?.id) return existingUser.id;
-
-  const anyUser = await prisma.user.findFirst({
-    select: { id: true },
-  });
-
-  if (anyUser?.id) return anyUser.id;
-
-  const newUser = await prisma.user.create({
-    data: { heroName: 'IronLegend' },
-    select: { id: true },
-  });
-
-  return newUser.id;
+  throw new Error('UNAUTHORIZED: Authentication required');
 }
 
 /**

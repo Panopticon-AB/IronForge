@@ -203,13 +203,17 @@ export function LiveForgeContainer({ initialSession }: LiveForgeContainerProps) 
               throw new Error(result.error);
             }
 
-            // If persisted, update state optimistically with the canonical set
-            if (result.status === 'PERSISTED') {
+            // If persisted (or already persisted on idempotent retry), update state with the canonical set
+            if ((result.status === 'PERSISTED' || result.status === 'DUPLICATE_IGNORED') && result.set) {
               const updatedSet = result.set;
               setSession((prev) => {
                 if (!prev) return null;
                 const nextExercises = prev.performedExercises.map((e, idx) => {
                   if (idx !== activeExerciseIndex) return e;
+                  // Avoid adding duplicate set to local state if already present
+                  if (e.sets.some((s) => s.clientWriteId === updatedSet.clientWriteId)) {
+                    return e;
+                  }
                   return {
                     ...e,
                     sets: [...e.sets, updatedSet],

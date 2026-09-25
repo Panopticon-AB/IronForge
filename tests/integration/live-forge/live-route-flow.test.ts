@@ -14,6 +14,8 @@ describe('Integration: Live Forge Mobile Vertical Slice (/live)', () => {
   let userId: string;
 
   beforeAll(async () => {
+    process.env.IRONFORGE_E2E_MODE = 'true';
+    process.env.IRONFORGE_E2E_USER_ID = 'integration-live-forge-user';
     userId = await resolveUserId();
 
     // Clean up any lingering test sessions for this user

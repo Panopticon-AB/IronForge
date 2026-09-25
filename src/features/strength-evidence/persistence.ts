@@ -221,7 +221,11 @@ export async function getCanonicalStrengthSets(
     orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
   });
 
-  return rows.map((r) => ({
+  return rows.map(rowToCanonicalStrengthSet);
+}
+
+export function rowToCanonicalStrengthSet(r: any): CanonicalStrengthSet {
+  return {
     id: r.id,
     performedExerciseId: r.performedExerciseId,
     measurementMode: r.measurementMode as any,
@@ -239,17 +243,17 @@ export async function getCanonicalStrengthSets(
     ...(r.rpe !== null && r.rpe !== undefined ? { rpe: r.rpe } : {}),
     ...(r.rir !== null && r.rir !== undefined ? { rir: r.rir } : {}),
     setType: r.setType as any,
-    completedAt: r.completedAt.toISOString(),
+    completedAt: r.completedAt instanceof Date ? r.completedAt.toISOString() : r.completedAt,
     clientWriteId: r.clientWriteId,
     ...(r.note !== null && r.note !== undefined ? { note: r.note } : {}),
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-  }));
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+  };
 }
 
 export type PersistCanonicalSetResult =
   | { status: 'PERSISTED'; clientWriteId: string; set: CanonicalStrengthSet }
-  | { status: 'DUPLICATE_IGNORED'; clientWriteId: string }
+  | { status: 'DUPLICATE_IGNORED'; clientWriteId: string; set?: CanonicalStrengthSet }
   | { status: 'INVALID_INPUT'; error: string };
 
 /**
@@ -384,6 +388,21 @@ export async function persistCanonicalStrengthSet(
   } catch (error: any) {
     // Prisma unique constraint violation code is P2002
     if (error?.code === 'P2002') {
+      const existingSetRow = await prisma.strengthEvidenceSet.findUnique({
+        where: {
+          sessionId_clientWriteId: {
+            sessionId: sessionRow.id,
+            clientWriteId: validatedSet.clientWriteId,
+          },
+        },
+      });
+      if (existingSetRow) {
+        return {
+          status: 'DUPLICATE_IGNORED',
+          clientWriteId: validatedSet.clientWriteId,
+          set: rowToCanonicalStrengthSet(existingSetRow),
+        };
+      }
       return { status: 'DUPLICATE_IGNORED', clientWriteId: validatedSet.clientWriteId };
     }
     throw error;
