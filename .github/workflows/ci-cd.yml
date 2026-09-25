@@ -257,6 +257,82 @@ jobs:
             Write-Host "⚠️ N8N_CI_TRIAGE_WEBHOOK_URL not set. Skipping Active Handover."
           }
 
+  # ==================================================================
+  # GATE 1: MOBILE VERTICAL SLICE ACCEPTANCE (PR MERGE GATE)
+  # Proves the real mobile browser flow and network retry on PR head
+  # ==================================================================
+  gate1-mobile-acceptance:
+    name: "🎭 Gate 1 Mobile Acceptance"
+    needs: [classify-pr-impact]
+    if: >-
+      (github.event_name == 'pull_request' || startsWith(github.ref, 'refs/heads/fix/')) &&
+      needs.classify-pr-impact.outputs.run-l1 == 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      CI: 'true'
+      IRONFORGE_E2E_SKIP_GLOBAL_SETUP: 'true'
+      IRONFORGE_E2E_MODE: 'true'
+      IRONFORGE_E2E_USER_ID: 'e2e-gate1-user'
+      DATABASE_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
+      DIRECT_URL: postgresql://postgres@127.0.0.1:5432/ironforge_test?schema=public
+      NEXT_PUBLIC_SUPABASE_URL: http://127.0.0.1:54421
+      NEXT_PUBLIC_SUPABASE_ANON_KEY: local-ci-placeholder
+      NEXT_PUBLIC_APP_URL: http://127.0.0.1:3001
+      SKIP_ENV_VALIDATION: 'true'
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_DB: ironforge_test
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d ironforge_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: ./.github/actions/setup-ironforge
+        with:
+          tier: 'l1'
+          skip-managed-services: 'true'
+          skip-validation: 'true'
+      - name: Initialize DB (Gate 1)
+        run: npx prisma db push --accept-data-loss
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run Gate 1 mobile acceptance tests
+        run: pnpm run test:gate1
+      - name: "🩺 Active Handover: Gate 1 Acceptance Failure"
+        if: failure()
+        continue-on-error: true
+        shell: pwsh
+        env:
+          N8N_WEBHOOK_URL: ${{ env.N8N_CI_TRIAGE_WEBHOOK_URL }}
+        run: |
+          $payload = @{
+            job_name = 'gate1-mobile-acceptance'
+            run_id = '${{ github.run_id }}'
+            pr_number = '${{ github.event.pull_request.number }}'
+            branch = '${{ github.head_ref || github.ref_name }}'
+            conclusion = 'failure'
+            logs_summary = 'Gate 1 Mobile Acceptance failed: Playwright gate1-live-forge tests'
+          } | ConvertTo-Json -Compress
+          if ($env:N8N_WEBHOOK_URL) {
+            try {
+              Invoke-RestMethod -Uri $env:N8N_WEBHOOK_URL -Method Post -Body $payload -ContentType 'application/json' -SkipCertificateCheck -TimeoutSec 5
+              Write-Host "🩺 Dispatched to n8n CI Triage Router"
+            } catch {
+              Write-Host "⚠️ n8n dispatch failed (non-fatal): $_"
+            }
+          }
 
   # ==================================================================
   # TIER L2: FULL VERIFICATION (MERGE)

@@ -12,11 +12,15 @@ test.describe('Live Forge: Gate 1 Critical Path Acceptance @smoke', () => {
   let testUserId: string;
 
   test.beforeAll(async () => {
-    // Strict safety guards: verify non-production and test DB
+    // Strict safety guards: verify non-production and explicit test DB
     expect(process.env.NODE_ENV).not.toBe('production');
     expect(process.env.IRONFORGE_E2E_MODE).toBe('true');
-    const dbUrl = process.env.DATABASE_URL || '';
-    expect(dbUrl).toMatch(/ironforge_test|localhost|127\.0\.0\.1|5432/);
+    const rawDbUrl = process.env.DATABASE_URL || '';
+    expect(rawDbUrl).toBeTruthy();
+
+    const parsedUrl = new URL(rawDbUrl);
+    const dbName = parsedUrl.pathname.replace(/^\//, '');
+    expect(dbName).toBe('ironforge_test');
   });
 
   test.beforeEach(async () => {
