@@ -10,6 +10,7 @@
     "start": "next start",
     "test": "vitest run",
     "test:unit": "vitest run",
+    "test:gate1": "playwright test tests/e2e/gate1-live-forge.spec.ts --project=mobile-smoke",
     "test:smoke": "playwright test --grep @smoke",
     "test:exhaustive": "playwright test",
     "test:coverage": "vitest run --coverage",

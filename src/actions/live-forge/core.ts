@@ -9,7 +9,10 @@ import {
   getCanonicalStrengthSets,
   persistCanonicalStrengthSet,
 } from '@/features/strength-evidence/persistence';
-import type { CanonicalStrengthSetInput } from '@/features/strength-evidence/write-contract';
+import type {
+  CanonicalStrengthSet,
+  CanonicalStrengthSetInput,
+} from '@/features/strength-evidence/write-contract';
 import {
   CANONICAL_STRENGTH_TEMPLATES,
   type StrengthTemplateDefinition,
@@ -286,6 +289,12 @@ export async function finishStrengthSessionAction(params: {
   return reconstructActiveStrengthSession(updatedRow);
 }
 
+export interface CompletedSessionExerciseHistory {
+  exerciseId: string;
+  exerciseName: string;
+  sets: CanonicalStrengthSet[];
+}
+
 export interface CompletedSessionHistoryItem {
   id: string;
   sessionId: string;
@@ -295,14 +304,11 @@ export interface CompletedSessionHistoryItem {
   templateCode: string;
   outcome: string;
   totalSets: number;
-  exercises: {
-    exerciseName: string;
-    setsCount: number;
-  }[];
+  exercises: CompletedSessionExerciseHistory[];
 }
 
 /**
- * Retrieves completed session history for the user.
+ * Retrieves completed session history for the user with full canonical sets.
  */
 export async function getStrengthSessionHistoryAction(): Promise<CompletedSessionHistoryItem[]> {
   const userId = await resolveUserId();
@@ -323,16 +329,42 @@ export async function getStrengthSessionHistoryAction(): Promise<CompletedSessio
     const evidence = sess.evidence as any;
     const sets = await getCanonicalStrengthSets(userId, sess.source, sess.providerSessionId);
 
-    const exerciseMap = new Map<string, number>();
-    for (const set of sets) {
-      const name = set.performedExerciseId;
-      exerciseMap.set(name, (exerciseMap.get(name) || 0) + 1);
+    // Map template snapshot or templateCode to resolve human-readable exercise names
+    const snapshotExercises = evidence?.templateSnapshot?.exercises || [];
+    const exerciseNameMap = new Map<string, string>();
+    for (const ex of snapshotExercises) {
+      exerciseNameMap.set(ex.exerciseId, ex.exerciseName);
     }
 
-    const exercises = Array.from(exerciseMap.entries()).map(([exerciseName, setsCount]) => ({
-      exerciseName,
-      setsCount,
-    }));
+    // Fallback to base canonical template definition if snapshot is incomplete
+    const code = (evidence?.templateCode || 'A1') as 'A1' | 'B1' | 'A2' | 'B2';
+    const fallbackTemplate = CANONICAL_STRENGTH_TEMPLATES[code] || CANONICAL_STRENGTH_TEMPLATES.A1;
+    for (const ex of fallbackTemplate.exercises) {
+      if (!exerciseNameMap.has(ex.exerciseId)) {
+        exerciseNameMap.set(ex.exerciseId, ex.exerciseName);
+      }
+    }
+
+    // Group sets by performedExerciseId while preserving performance order
+    const exerciseMap = new Map<string, { exerciseName: string; sets: CanonicalStrengthSet[] }>();
+    for (const set of sets) {
+      const exerciseId = set.performedExerciseId;
+      const exerciseName = exerciseNameMap.get(exerciseId) || exerciseId;
+      let entry = exerciseMap.get(exerciseId);
+      if (!entry) {
+        entry = { exerciseName, sets: [] };
+        exerciseMap.set(exerciseId, entry);
+      }
+      entry.sets.push(set);
+    }
+
+    const exercises: CompletedSessionExerciseHistory[] = Array.from(exerciseMap.entries()).map(
+      ([exerciseId, val]) => ({
+        exerciseId,
+        exerciseName: val.exerciseName,
+        sets: val.sets,
+      })
+    );
 
     historyItems.push({
       id: sess.id,

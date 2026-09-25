@@ -161,11 +161,20 @@ describe('Integration: Live Forge Mobile Vertical Slice (/live)', () => {
     expect(historicalEntry).toBeDefined();
     expect(historicalEntry!.outcome).toBe('KLAR_FOR_IDAG');
     expect(historicalEntry!.totalSets).toBe(2);
-    expect(historicalEntry!.exercises).toEqual(
-      expect.arrayContaining([
-        { exerciseName: 'belt-squat', setsCount: 1 },
-        { exerciseName: 'calf-raise', setsCount: 1 },
-      ])
-    );
+    expect(historicalEntry!.exercises.length).toBe(2);
+
+    const beltSquatHistory = historicalEntry!.exercises.find((e) => e.exerciseId === 'belt-squat');
+    expect(beltSquatHistory).toBeDefined();
+    expect(beltSquatHistory!.exerciseName).toBe('Belt Squat');
+    expect(beltSquatHistory!.sets.length).toBe(1);
+    expect(beltSquatHistory!.sets[0].load).toBe(100);
+    expect(beltSquatHistory!.sets[0].reps).toBe(8);
+
+    const calfRaiseHistory = historicalEntry!.exercises.find((e) => e.exerciseId === 'calf-raise');
+    expect(calfRaiseHistory).toBeDefined();
+    expect(calfRaiseHistory!.exerciseName).toBe('Calf Raise');
+    expect(calfRaiseHistory!.sets.length).toBe(1);
+    expect(calfRaiseHistory!.sets[0].load).toBe(60);
+    expect(calfRaiseHistory!.sets[0].reps).toBe(12);
   });
 });

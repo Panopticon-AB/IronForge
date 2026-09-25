@@ -24,13 +24,15 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: { name: string; value: string; options?: Partial<ResponseCookie> }[]) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
           supabaseResponse = NextResponse.next({
             request,
           });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            supabaseResponse.cookies.set(name, value, options);
+          });
         },
       },
     }
@@ -49,7 +51,8 @@ export async function updateSession(request: NextRequest) {
     request.nextUrl.pathname.startsWith('/auth') ||
     request.nextUrl.pathname.startsWith('/welcome') ||
     request.nextUrl.pathname.startsWith('/marketing') ||
-    request.nextUrl.pathname.startsWith('/factory');
+    request.nextUrl.pathname.startsWith('/factory') ||
+    request.nextUrl.pathname.startsWith('/live');
 
   if (!user && !isPublicRoute) {
     // no user, potentially respond by redirecting the user to the login page

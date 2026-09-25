@@ -24,6 +24,52 @@ function formatDate(iso: string): string {
   }
 }
 
+function formatCanonicalSet(set: any): string {
+  const parts: string[] = [];
+
+  if (set.side) {
+    parts.push(set.side === 'LEFT' ? 'V' : set.side === 'RIGHT' ? 'H' : 'Bilateral');
+  }
+
+  switch (set.measurementMode) {
+    case 'LOAD_AND_REPS': {
+      const loadStr =
+        set.load !== undefined ? `${set.load} ${set.loadUnit?.toLowerCase() || 'kg'}` : '';
+      const repsStr = set.reps !== undefined ? `${set.reps}` : '';
+      if (loadStr && repsStr) parts.push(`${loadStr} × ${repsStr}`);
+      else if (repsStr) parts.push(`${repsStr} reps`);
+      else if (loadStr) parts.push(loadStr);
+      break;
+    }
+    case 'REPS_ONLY': {
+      if (set.reps !== undefined) parts.push(`${set.reps} reps`);
+      break;
+    }
+    case 'DURATION': {
+      if (set.durationSeconds !== undefined) parts.push(`${set.durationSeconds} s`);
+      break;
+    }
+    case 'DURATION_AND_LOAD': {
+      const durStr = set.durationSeconds !== undefined ? `${set.durationSeconds} s` : '';
+      const loadStr =
+        set.load !== undefined ? `${set.load} ${set.loadUnit?.toLowerCase() || 'kg'}` : '';
+      if (durStr && loadStr) parts.push(`${durStr} (${loadStr})`);
+      else if (durStr) parts.push(durStr);
+      break;
+    }
+    default: {
+      if (set.reps !== undefined) parts.push(`${set.reps} reps`);
+      break;
+    }
+  }
+
+  if (set.rpe !== undefined) {
+    parts.push(`@${set.rpe}`);
+  }
+
+  return parts.join(' ');
+}
+
 export default async function LiveForgeHistoryPage() {
   const history = await getStrengthSessionHistoryAction();
 
@@ -64,12 +110,12 @@ export default async function LiveForgeHistoryPage() {
             </Link>
           </div>
         ) : (
-          <div className="space-y-3" data-testid="completed-sessions-list">
+          <div className="space-y-4" data-testid="completed-sessions-list">
             {history.map((sess) => (
               <div
                 key={sess.id}
                 data-testid={`history-session-${sess.sessionId}`}
-                className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-all space-y-2.5"
+                className="p-4 bg-zinc-950 rounded-xl border border-zinc-800 hover:border-zinc-700 transition-all space-y-3"
               >
                 <div className="flex items-center justify-between text-xs">
                   <div className="flex items-center gap-1.5 text-zinc-400 font-mono">
@@ -90,14 +136,29 @@ export default async function LiveForgeHistoryPage() {
                 </div>
 
                 {sess.exercises.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1 border-t border-zinc-800/80">
+                  <div className="space-y-2 pt-2 border-t border-zinc-800/80">
                     {sess.exercises.map((ex) => (
-                      <span
-                        key={ex.exerciseName}
-                        className="text-[11px] bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded text-zinc-300 font-mono"
+                      <div
+                        key={ex.exerciseId}
+                        data-testid={`history-exercise-${ex.exerciseId}`}
+                        className="space-y-1"
                       >
-                        {ex.exerciseName}: {ex.setsCount} set
-                      </span>
+                        <div className="text-xs font-bold text-zinc-300 font-mono flex items-center gap-1">
+                          <span className="text-orange-500">•</span>
+                          {ex.exerciseName}
+                        </div>
+                        <div className="flex flex-wrap gap-1.5 pl-3">
+                          {ex.sets.map((set, setIdx) => (
+                            <span
+                              key={set.clientWriteId || set.id || setIdx}
+                              data-testid="history-set-item"
+                              className="text-xs bg-zinc-900 border border-zinc-800 px-2 py-0.5 rounded text-zinc-200 font-mono"
+                            >
+                              {formatCanonicalSet(set)}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
                     ))}
                   </div>
                 )}
