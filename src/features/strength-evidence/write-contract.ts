@@ -26,6 +26,7 @@ export interface CanonicalStrengthSet {
   load?: number;
   loadUnit?: LoadUnit;
   loadSemantics?: LoadSemantics;
+  loadKg?: number;
   reps?: number;
   durationSeconds?: number;
   side?: SetSide;
@@ -41,7 +42,7 @@ export interface CanonicalStrengthSet {
 
 export const CanonicalStrengthSetSchema = z
   .object({
-    id: z.string().min(1),
+    id: z.string().min(1).optional(),
     performedExerciseId: z.string().min(1),
     measurementMode: z.enum([
       'LOAD_AND_REPS',
@@ -91,6 +92,13 @@ export const CanonicalStrengthSetSchema = z
             path: ['reps'],
           });
         }
+        if (data.durationSeconds !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Duration is not permitted for LOAD_AND_REPS',
+            path: ['durationSeconds'],
+          });
+        }
         if (data.load !== undefined && !data.loadUnit) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
@@ -122,6 +130,27 @@ export const CanonicalStrengthSetSchema = z
             path: ['load'],
           });
         }
+        if (data.loadUnit !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Load unit is not permitted for REPS_ONLY',
+            path: ['loadUnit'],
+          });
+        }
+        if (data.loadSemantics !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Load semantics are not permitted for REPS_ONLY',
+            path: ['loadSemantics'],
+          });
+        }
+        if (data.durationSeconds !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Duration is not permitted for REPS_ONLY',
+            path: ['durationSeconds'],
+          });
+        }
         break;
       }
       case 'DURATION': {
@@ -137,6 +166,20 @@ export const CanonicalStrengthSetSchema = z
             code: z.ZodIssueCode.custom,
             message: 'Load is not permitted for DURATION',
             path: ['load'],
+          });
+        }
+        if (data.loadUnit !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Load unit is not permitted for DURATION',
+            path: ['loadUnit'],
+          });
+        }
+        if (data.loadSemantics !== undefined) {
+          ctx.addIssue({
+            code: z.ZodIssueCode.custom,
+            message: 'Load semantics are not permitted for DURATION',
+            path: ['loadSemantics'],
           });
         }
         if (data.reps !== undefined) {
@@ -156,26 +199,43 @@ export const CanonicalStrengthSetSchema = z
             path: ['durationSeconds'],
           });
         }
-        if (data.load === undefined) {
+        if (data.reps !== undefined) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
-            message: 'Load is required for DURATION_AND_LOAD',
-            path: ['load'],
+            message: 'Reps are not permitted for DURATION_AND_LOAD',
+            path: ['reps'],
           });
         }
-        if (data.load !== undefined && !data.loadUnit) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Load unit is required when load is present',
-            path: ['loadUnit'],
-          });
-        }
-        if (data.load !== undefined && !data.loadSemantics) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            message: 'Load semantics are required when load is present',
-            path: ['loadSemantics'],
-          });
+        if (data.load !== undefined) {
+          if (!data.loadUnit) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Load unit is required when load is present',
+              path: ['loadUnit'],
+            });
+          }
+          if (!data.loadSemantics) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Load semantics are required when load is present',
+              path: ['loadSemantics'],
+            });
+          }
+        } else {
+          if (data.loadUnit !== undefined) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Load unit is not permitted when load is absent',
+              path: ['loadUnit'],
+            });
+          }
+          if (data.loadSemantics !== undefined) {
+            ctx.addIssue({
+              code: z.ZodIssueCode.custom,
+              message: 'Load semantics are not permitted when load is absent',
+              path: ['loadSemantics'],
+            });
+          }
         }
         break;
       }
@@ -184,6 +244,7 @@ export const CanonicalStrengthSetSchema = z
 
 export type CanonicalStrengthSetInput = z.input<typeof CanonicalStrengthSetSchema>;
 export type ValidatedCanonicalStrengthSet = z.infer<typeof CanonicalStrengthSetSchema>;
+
 
 /**
  * Explicit schema for user corrections to an existing canonical set.

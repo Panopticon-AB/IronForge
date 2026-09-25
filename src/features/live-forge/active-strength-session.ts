@@ -129,9 +129,11 @@ export class LiveStrengthSessionManager {
 
     const setRecord: CanonicalStrengthSet = {
       ...writeResult.set,
+      id: writeResult.set.id || setInput.clientWriteId,
       createdAt: writeResult.set.createdAt || setInput.completedAt,
       updatedAt: writeResult.set.updatedAt || setInput.completedAt,
     };
+
 
     const nextExercises = session.performedExercises.map((e, idx) => {
       if (idx !== exerciseIndex) return e;
@@ -233,6 +235,7 @@ export class LiveStrengthSessionManager {
 
       updatedSets[setIdx] = {
         ...parsed.data,
+        id: target.id,
         createdAt: target.createdAt,
         updatedAt: now,
       };

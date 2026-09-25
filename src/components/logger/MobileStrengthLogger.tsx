@@ -69,13 +69,13 @@ export function MobileStrengthLogger({
     setErrorMessage(null);
 
     const setInput: CanonicalStrengthSetInput = {
-      id: `set-${Date.now()}`,
       performedExerciseId: exercise.exerciseId,
       clientWriteId: pendingClientWriteId,
       measurementMode: mode,
       completedAt: new Date().toISOString(),
       setType: 'NORMAL',
     };
+
 
     if (isWeighted) {
       const parsedLoad = Number.parseFloat(load);

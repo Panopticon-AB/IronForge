@@ -4,8 +4,8 @@ import type { Prisma } from '@prisma/client';
 import type { StrengthSessionEvidence } from './domain';
 import {
   CanonicalStrengthSetSchema,
+  type CanonicalStrengthSet,
   type CanonicalStrengthSetInput,
-  type ValidatedCanonicalStrengthSet,
 } from './write-contract';
 
 export const STRENGTH_EVIDENCE_VERSION = 1;
@@ -112,10 +112,10 @@ export async function getStrengthSessionEvidence(
 
   if (!row) return null;
 
-  // Retrieve any normalized sets persisted for this session
+  // Retrieve normalized sets persisted for this session, ordered deterministically by performance time and stable DB ID
   const sets = await prisma.strengthEvidenceSet.findMany({
     where: { sessionId: row.id },
-    orderBy: [{ performedExerciseId: 'asc' }, { sequence: 'asc' }, { createdAt: 'asc' }],
+    orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
   });
 
   if (sets.length === 0) {
@@ -129,10 +129,10 @@ export async function getStrengthSessionEvidence(
     exercises: [],
   };
 
-  // Group sets by performedExerciseId while preserving sequence
+  // Group sets by performedExerciseId while preserving deterministic order
   const exerciseMap = new Map<string, { exerciseName?: string; sequence: number; sets: any[] }>();
 
-  // Initialize with any exercises already in sessionEvidence to keep original names and sequence
+  // Initialize with any exercises already in sessionEvidence to keep original sequence
   for (const ex of sessionEvidence.exercises || []) {
     exerciseMap.set(ex.providerExerciseId || ex.exerciseName, {
       exerciseName: ex.exerciseName,
@@ -156,8 +156,8 @@ export async function getStrengthSessionEvidence(
     }
 
     const setItem: any = {
-      sequence: setRow.sequence,
-      providerSetIndex: setRow.sequence,
+      sequence: ex.sets.length,
+      providerSetIndex: ex.sets.length,
       clientWriteId: setRow.clientWriteId,
       measurementMode: setRow.measurementMode,
     };
@@ -193,10 +193,64 @@ export async function getStrengthSessionEvidence(
   };
 }
 
+/**
+ * Lossless canonical readback directly from the normalized database rows.
+ * Exposes stable server-assigned IDs, exact clientWriteIds, units, timestamps, and metadata.
+ */
+export async function getCanonicalStrengthSets(
+  userId: string,
+  source: string,
+  providerSessionId: string
+): Promise<CanonicalStrengthSet[]> {
+  const sessionRow = await prisma.strengthEvidenceSession.findUnique({
+    where: {
+      userId_source_providerSessionId: {
+        userId,
+        source,
+        providerSessionId,
+      },
+    },
+    select: { id: true },
+  });
+
+  if (!sessionRow) return [];
+
+  const rows = await prisma.strengthEvidenceSet.findMany({
+    where: { sessionId: sessionRow.id },
+    orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
+  });
+
+  return rows.map((r) => ({
+    id: r.id,
+    performedExerciseId: r.performedExerciseId,
+    measurementMode: r.measurementMode as any,
+    ...(r.load !== null && r.load !== undefined ? { load: r.load } : {}),
+    ...(r.loadUnit !== null && r.loadUnit !== undefined ? { loadUnit: r.loadUnit as any } : {}),
+    ...(r.loadSemantics !== null && r.loadSemantics !== undefined
+      ? { loadSemantics: r.loadSemantics as any }
+      : {}),
+    ...(r.loadKg !== null && r.loadKg !== undefined ? { loadKg: r.loadKg } : {}),
+    ...(r.reps !== null && r.reps !== undefined ? { reps: r.reps } : {}),
+    ...(r.durationSeconds !== null && r.durationSeconds !== undefined
+      ? { durationSeconds: r.durationSeconds }
+      : {}),
+    ...(r.side !== null && r.side !== undefined ? { side: r.side as any } : {}),
+    ...(r.rpe !== null && r.rpe !== undefined ? { rpe: r.rpe } : {}),
+    ...(r.rir !== null && r.rir !== undefined ? { rir: r.rir } : {}),
+    setType: r.setType as any,
+    completedAt: r.completedAt.toISOString(),
+    clientWriteId: r.clientWriteId,
+    ...(r.note !== null && r.note !== undefined ? { note: r.note } : {}),
+    createdAt: r.createdAt.toISOString(),
+    updatedAt: r.updatedAt.toISOString(),
+  }));
+}
+
 export type PersistCanonicalSetResult =
-  | { status: 'PERSISTED'; clientWriteId: string; set: ValidatedCanonicalStrengthSet }
+  | { status: 'PERSISTED'; clientWriteId: string; set: CanonicalStrengthSet }
   | { status: 'DUPLICATE_IGNORED'; clientWriteId: string }
   | { status: 'INVALID_INPUT'; error: string };
+
 
 /**
  * Persists a canonical strength set into the database session evidence idempotently.
@@ -280,8 +334,9 @@ export async function persistCanonicalStrengthSet(
   });
 
   // 3. Insert into StrengthEvidenceSet with unique constraint on [sessionId, clientWriteId]
+  let createdRow: any;
   try {
-    await prisma.strengthEvidenceSet.create({
+    createdRow = await prisma.strengthEvidenceSet.create({
       data: {
         sessionId: sessionRow.id,
         clientWriteId: validatedSet.clientWriteId,
@@ -365,6 +420,31 @@ export async function persistCanonicalStrengthSet(
     }
   }
 
-  return { status: 'PERSISTED', clientWriteId: validatedSet.clientWriteId, set: validatedSet };
+  const canonicalSet: CanonicalStrengthSet = {
+    id: createdRow.id,
+    performedExerciseId,
+    measurementMode: validatedSet.measurementMode,
+    ...(validatedSet.load !== undefined ? { load: validatedSet.load } : {}),
+    ...(validatedSet.loadUnit !== undefined ? { loadUnit: validatedSet.loadUnit } : {}),
+    ...(validatedSet.loadSemantics !== undefined
+      ? { loadSemantics: validatedSet.loadSemantics }
+      : {}),
+    ...(loadKg !== undefined ? { loadKg } : {}),
+    ...(validatedSet.reps !== undefined ? { reps: validatedSet.reps } : {}),
+    ...(validatedSet.durationSeconds !== undefined
+      ? { durationSeconds: validatedSet.durationSeconds }
+      : {}),
+    ...(validatedSet.side !== undefined ? { side: validatedSet.side } : {}),
+    ...(validatedSet.rpe !== undefined ? { rpe: validatedSet.rpe } : {}),
+    ...(validatedSet.rir !== undefined ? { rir: validatedSet.rir } : {}),
+    setType: validatedSet.setType,
+    completedAt: validatedSet.completedAt,
+    clientWriteId: validatedSet.clientWriteId,
+    ...(validatedSet.note !== undefined ? { note: validatedSet.note } : {}),
+    createdAt: createdRow.createdAt ? createdRow.createdAt.toISOString() : validatedSet.completedAt,
+    updatedAt: createdRow.updatedAt ? createdRow.updatedAt.toISOString() : validatedSet.completedAt,
+  };
+
+  return { status: 'PERSISTED', clientWriteId: validatedSet.clientWriteId, set: canonicalSet };
 }
 

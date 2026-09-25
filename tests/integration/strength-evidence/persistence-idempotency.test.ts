@@ -4,6 +4,7 @@ import {
   persistCanonicalStrengthSet,
   getStrengthSessionEvidence,
   persistStrengthSessionEvidence,
+  getCanonicalStrengthSets,
 } from '@/features/strength-evidence/persistence';
 import type { CanonicalStrengthSetInput } from '@/features/strength-evidence/write-contract';
 import type { StrengthSessionEvidence } from '@/features/strength-evidence/domain';
@@ -314,6 +315,131 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
     expect(rdSets).toHaveLength(2);
     const writeIds = rdSets.map((s) => s.clientWriteId).sort();
     expect(writeIds).toEqual([writeIdA, writeIdB].sort());
+
+    // Verify deterministic ordering: completedAt asc, id asc
+    const canonicalSets = await getCanonicalStrengthSets(
+      testUserId,
+      testSource,
+      concurrentSessionId
+    );
+    expect(canonicalSets).toHaveLength(2);
+    expect(canonicalSets[0].completedAt <= canonicalSets[1].completedAt).toBe(true);
+    if (canonicalSets[0].completedAt === canonicalSets[1].completedAt) {
+      expect(canonicalSets[0].id < canonicalSets[1].id).toBe(true);
+    }
+  });
+
+  it('performs lossless canonical write -> DB -> readback preserving full schema and server-assigned ID', async () => {
+    const losslessSessionId = `test-lossless-sess-${Date.now()}`;
+    const writeId = `cw-lossless-${Date.now()}`;
+    const completedAtIso = '2026-09-24T19:15:30.000Z';
+
+    const setInput: CanonicalStrengthSetInput = {
+      // id omitted to verify server assigns canonical database ID
+      performedExerciseId: 'weighted-plank',
+      clientWriteId: writeId,
+      measurementMode: 'DURATION_AND_LOAD',
+      durationSeconds: 60,
+      load: 20,
+      loadUnit: 'KG',
+      loadSemantics: 'ADDED_LOAD',
+      side: 'BILATERAL',
+      rpe: 9,
+      rir: 1,
+      setType: 'NORMAL',
+      completedAt: completedAtIso,
+      note: 'Plank with 20kg plate on back',
+    };
+
+    const persistRes = await persistCanonicalStrengthSet(
+      testUserId,
+      testSource,
+      losslessSessionId,
+      0,
+      'Weighted Plank',
+      'weighted-plank',
+      setInput,
+      { title: 'Core & Stability' }
+    );
+
+    expect(persistRes.status).toBe('PERSISTED');
+    if (persistRes.status !== 'PERSISTED') return;
+
+    // Verify returned canonical set has server-assigned DB id
+    expect(persistRes.set.id).toBeDefined();
+    expect(typeof persistRes.set.id).toBe('string');
+    expect(persistRes.set.id.length).toBeGreaterThan(5);
+
+    // Read back through lossless query
+    const readbackSets = await getCanonicalStrengthSets(
+      testUserId,
+      testSource,
+      losslessSessionId
+    );
+
+    expect(readbackSets).toHaveLength(1);
+    const readSet = readbackSets[0];
+
+    // Assert every relevant field
+    expect(readSet.id).toBe(persistRes.set.id);
+    expect(readSet.performedExerciseId).toBe('weighted-plank');
+    expect(readSet.clientWriteId).toBe(writeId);
+    expect(readSet.measurementMode).toBe('DURATION_AND_LOAD');
+    expect(readSet.durationSeconds).toBe(60);
+    expect(readSet.load).toBe(20);
+    expect(readSet.loadUnit).toBe('KG');
+    expect(readSet.loadSemantics).toBe('ADDED_LOAD');
+    expect(readSet.loadKg).toBe(20);
+    expect(readSet.reps).toBeUndefined();
+    expect(readSet.side).toBe('BILATERAL');
+    expect(readSet.rpe).toBe(9);
+    expect(readSet.rir).toBe(1);
+    expect(readSet.setType).toBe('NORMAL');
+    expect(readSet.completedAt).toBe(new Date(completedAtIso).toISOString());
+    expect(readSet.note).toBe('Plank with 20kg plate on back');
+    expect(readSet.createdAt).toBeDefined();
+    expect(readSet.updatedAt).toBeDefined();
+  });
+
+  it('persists DURATION_AND_LOAD with duration only (load optional) losslessly', async () => {
+    const durationOnlySessionId = `test-duration-only-sess-${Date.now()}`;
+    const writeId = `cw-duration-only-${Date.now()}`;
+
+    const setInput: CanonicalStrengthSetInput = {
+      performedExerciseId: 'dead-hang',
+      clientWriteId: writeId,
+      measurementMode: 'DURATION_AND_LOAD',
+      durationSeconds: 45,
+      // No load, no loadUnit, no loadSemantics
+      setType: 'NORMAL',
+      completedAt: new Date().toISOString(),
+    };
+
+    const persistRes = await persistCanonicalStrengthSet(
+      testUserId,
+      testSource,
+      durationOnlySessionId,
+      0,
+      'Dead Hang',
+      'dead-hang',
+      setInput
+    );
+
+    expect(persistRes.status).toBe('PERSISTED');
+
+    const readbackSets = await getCanonicalStrengthSets(
+      testUserId,
+      testSource,
+      durationOnlySessionId
+    );
+
+    expect(readbackSets).toHaveLength(1);
+    expect(readbackSets[0].durationSeconds).toBe(45);
+    expect(readbackSets[0].load).toBeUndefined();
+    expect(readbackSets[0].loadUnit).toBeUndefined();
+    expect(readbackSets[0].loadSemantics).toBeUndefined();
+    expect(readbackSets[0].loadKg).toBeUndefined();
+    expect(readbackSets[0].reps).toBeUndefined();
   });
 });
 
