@@ -41,7 +41,9 @@ function runBiome(files: string[]): void {
   const pnpm = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm';
   execFileSync(pnpm, ['exec', 'biome', 'lint', ...files], {
     stdio: 'inherit',
+    shell: process.platform === 'win32',
   });
 }
+
 
 runBiome(getChangedLintableFiles());

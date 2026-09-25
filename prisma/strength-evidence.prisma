@@ -15,3 +15,30 @@ model StrengthEvidenceSession {
   @@unique([userId, source, providerSessionId])
   @@index([userId, startedAt])
 }
+
+model StrengthEvidenceSet {
+  id                  String   @id @default(cuid())
+  sessionId           String
+  clientWriteId       String
+  performedExerciseId String
+  exerciseName        String?
+  sequence            Int      @default(0)
+  measurementMode     String
+  load                Float?
+  loadUnit            String?
+  loadSemantics       String?
+  loadKg              Float?
+  reps                Int?
+  durationSeconds     Int?
+  side                String?
+  rpe                 Float?
+  rir                 Float?
+  setType             String   @default("NORMAL")
+  note                String?
+  completedAt         DateTime
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@unique([sessionId, clientWriteId])
+  @@index([sessionId, performedExerciseId])
+}

@@ -15,6 +15,7 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
 
   beforeAll(async () => {
     try {
+      await prisma.strengthEvidenceSet.deleteMany({});
       await prisma.strengthEvidenceSession.deleteMany({
         where: { userId: testUserId },
       });
@@ -25,6 +26,7 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
 
   afterAll(async () => {
     try {
+      await prisma.strengthEvidenceSet.deleteMany({});
       await prisma.strengthEvidenceSession.deleteMany({
         where: { userId: testUserId },
       });
@@ -32,6 +34,7 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
       // Ignore cleanup error
     }
   });
+
 
   it('persists set, reads back truthfully, deduplicates replayed write ID across service reconstruction', async () => {
     // 1. Initial write of a canonical set (weighted LOAD_AND_REPS)
@@ -177,5 +180,140 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
     );
     expect(completedReadBack?.endedAt).toBe('2026-09-24T18:30:00.000Z');
     expect(completedReadBack?.exercises[0].sets).toHaveLength(2);
+
+    // 7. Verify directly against normalized StrengthEvidenceSet table
+    const normalizedRows = await prisma.strengthEvidenceSet.findMany({
+      where: {
+        performedExerciseId: 'belt-squat',
+      },
+      orderBy: { sequence: 'asc' },
+    });
+    expect(normalizedRows).toHaveLength(2);
+    expect(normalizedRows[0].clientWriteId).toBe('cw-unique-belt-squat-1');
+    expect(normalizedRows[1].clientWriteId).toBe('cw-unique-belt-squat-2-lbs');
+  });
+
+  it('safely handles concurrent writes with the same clientWriteId (exactly one persists, one duplicate acknowledged)', async () => {
+    const concurrentSessionId = `test-concurrent-sess-${Date.now()}`;
+    const duplicateWriteId = `cw-concurrent-dup-${Date.now()}`;
+
+    const setCandidate: CanonicalStrengthSetInput = {
+      id: `set-id-dup-${Date.now()}`,
+      performedExerciseId: 'overhead-press',
+      clientWriteId: duplicateWriteId,
+      measurementMode: 'LOAD_AND_REPS',
+      load: 60,
+      loadUnit: 'KG',
+      loadSemantics: 'TOTAL_EXTERNAL_LOAD',
+      reps: 8,
+      completedAt: new Date().toISOString(),
+      setType: 'NORMAL',
+    };
+
+    // Fire 2 concurrent write requests with identical clientWriteId
+    const [res1, res2] = await Promise.all([
+      persistCanonicalStrengthSet(
+        testUserId,
+        testSource,
+        concurrentSessionId,
+        0,
+        'Overhead Press',
+        'overhead-press',
+        setCandidate,
+        { title: 'Concurrent Race Test' }
+      ),
+      persistCanonicalStrengthSet(
+        testUserId,
+        testSource,
+        concurrentSessionId,
+        0,
+        'Overhead Press',
+        'overhead-press',
+        setCandidate,
+        { title: 'Concurrent Race Test' }
+      ),
+    ]);
+
+    const statuses = [res1.status, res2.status].sort();
+    expect(statuses).toEqual(['DUPLICATE_IGNORED', 'PERSISTED']);
+
+    // Verify row-level uniqueness in PostgreSQL
+    const rows = await prisma.strengthEvidenceSet.findMany({
+      where: { clientWriteId: duplicateWriteId },
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0].clientWriteId).toBe(duplicateWriteId);
+  });
+
+  it('safely handles concurrent writes with distinct clientWriteIds without lost writes', async () => {
+    const concurrentSessionId = `test-concurrent-distinct-sess-${Date.now()}`;
+    const writeIdA = `cw-distinct-a-${Date.now()}`;
+    const writeIdB = `cw-distinct-b-${Date.now()}`;
+
+    const setA: CanonicalStrengthSetInput = {
+      id: `set-id-a-${Date.now()}`,
+      performedExerciseId: 'romanian-deadlift',
+      clientWriteId: writeIdA,
+      measurementMode: 'LOAD_AND_REPS',
+      load: 120,
+      loadUnit: 'KG',
+      loadSemantics: 'TOTAL_EXTERNAL_LOAD',
+      reps: 6,
+      completedAt: new Date().toISOString(),
+      setType: 'NORMAL',
+    };
+
+    const setB: CanonicalStrengthSetInput = {
+      id: `set-id-b-${Date.now()}`,
+      performedExerciseId: 'romanian-deadlift',
+      clientWriteId: writeIdB,
+      measurementMode: 'LOAD_AND_REPS',
+      load: 120,
+      loadUnit: 'KG',
+      loadSemantics: 'TOTAL_EXTERNAL_LOAD',
+      reps: 6,
+      completedAt: new Date().toISOString(),
+      setType: 'NORMAL',
+    };
+
+    // Fire concurrent writes for different sets
+    const [resA, resB] = await Promise.all([
+      persistCanonicalStrengthSet(
+        testUserId,
+        testSource,
+        concurrentSessionId,
+        0,
+        'Romanian Deadlift',
+        'romanian-deadlift',
+        setA,
+        { title: 'Concurrent Distinct Test' }
+      ),
+      persistCanonicalStrengthSet(
+        testUserId,
+        testSource,
+        concurrentSessionId,
+        0,
+        'Romanian Deadlift',
+        'romanian-deadlift',
+        setB,
+        { title: 'Concurrent Distinct Test' }
+      ),
+    ]);
+
+    expect(resA.status).toBe('PERSISTED');
+    expect(resB.status).toBe('PERSISTED');
+
+    // Verify both sets survived in PostgreSQL and materialized evidence
+    const readSession = await getStrengthSessionEvidence(
+      testUserId,
+      testSource,
+      concurrentSessionId
+    );
+    expect(readSession).not.toBeNull();
+    const rdSets = readSession!.exercises[0].sets;
+    expect(rdSets).toHaveLength(2);
+    const writeIds = rdSets.map((s) => s.clientWriteId).sort();
+    expect(writeIds).toEqual([writeIdA, writeIdB].sort());
   });
 });
+

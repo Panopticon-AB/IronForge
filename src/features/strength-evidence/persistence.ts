@@ -107,11 +107,90 @@ export async function getStrengthSessionEvidence(
         providerSessionId,
       },
     },
-    select: { evidence: true },
+    select: { id: true, evidence: true },
   });
 
-  if (!row?.evidence) return null;
-  return row.evidence as unknown as StrengthSessionEvidence;
+  if (!row) return null;
+
+  // Retrieve any normalized sets persisted for this session
+  const sets = await prisma.strengthEvidenceSet.findMany({
+    where: { sessionId: row.id },
+    orderBy: [{ performedExerciseId: 'asc' }, { sequence: 'asc' }, { createdAt: 'asc' }],
+  });
+
+  if (sets.length === 0) {
+    return (row.evidence as unknown as StrengthSessionEvidence) || null;
+  }
+
+  // Materialize truthful evidence from the normalized StrengthEvidenceSet rows
+  const sessionEvidence = (row.evidence as unknown as StrengthSessionEvidence) || {
+    provenance: { source: source as any, providerSessionId },
+    startedAt: sets[0]?.completedAt?.toISOString() || new Date().toISOString(),
+    exercises: [],
+  };
+
+  // Group sets by performedExerciseId while preserving sequence
+  const exerciseMap = new Map<string, { exerciseName?: string; sequence: number; sets: any[] }>();
+
+  // Initialize with any exercises already in sessionEvidence to keep original names and sequence
+  for (const ex of sessionEvidence.exercises || []) {
+    exerciseMap.set(ex.providerExerciseId || ex.exerciseName, {
+      exerciseName: ex.exerciseName,
+      sequence: ex.sequence,
+      sets: [],
+    });
+  }
+
+  for (const setRow of sets) {
+    const key = setRow.performedExerciseId;
+    let ex = exerciseMap.get(key);
+    if (!ex) {
+      ex = {
+        exerciseName: setRow.exerciseName || key,
+        sequence: exerciseMap.size,
+        sets: [],
+      };
+      exerciseMap.set(key, ex);
+    } else if (!ex.exerciseName && setRow.exerciseName) {
+      ex.exerciseName = setRow.exerciseName;
+    }
+
+    const setItem: any = {
+      sequence: setRow.sequence,
+      providerSetIndex: setRow.sequence,
+      clientWriteId: setRow.clientWriteId,
+      measurementMode: setRow.measurementMode,
+    };
+    if (setRow.load !== null && setRow.load !== undefined) setItem.load = setRow.load;
+    if (setRow.loadUnit !== null && setRow.loadUnit !== undefined) setItem.loadUnit = setRow.loadUnit;
+    if (setRow.loadSemantics !== null && setRow.loadSemantics !== undefined)
+      setItem.loadSemantics = setRow.loadSemantics;
+    if (setRow.loadKg !== null && setRow.loadKg !== undefined) setItem.loadKg = setRow.loadKg;
+    if (setRow.reps !== null && setRow.reps !== undefined) setItem.reps = setRow.reps;
+    if (setRow.durationSeconds !== null && setRow.durationSeconds !== undefined)
+      setItem.durationSeconds = setRow.durationSeconds;
+    if (setRow.side !== null && setRow.side !== undefined) setItem.side = setRow.side;
+    if (setRow.rpe !== null && setRow.rpe !== undefined) setItem.rpe = setRow.rpe;
+    if (setRow.rir !== null && setRow.rir !== undefined) setItem.rir = setRow.rir;
+    if (setRow.loadSemantics === 'BODYWEIGHT') setItem.isBodyweight = true;
+    if (setRow.note !== null && setRow.note !== undefined) setItem.note = setRow.note;
+
+    ex.sets.push(setItem);
+  }
+
+  const exercises = Array.from(exerciseMap.entries()).map(([providerExerciseId, val]) => ({
+    sequence: val.sequence,
+    exerciseName: val.exerciseName || providerExerciseId,
+    providerExerciseId,
+    sets: val.sets,
+  }));
+
+  exercises.sort((a, b) => a.sequence - b.sequence);
+
+  return {
+    ...sessionEvidence,
+    exercises,
+  };
 }
 
 export type PersistCanonicalSetResult =
@@ -122,7 +201,8 @@ export type PersistCanonicalSetResult =
 /**
  * Persists a canonical strength set into the database session evidence idempotently.
  * Guarantees that: same user/session + same clientWriteId -> exactly one canonical set.
- * Survives server restarts and multi-instance environments because PostgreSQL is authoritative.
+ * Survives server restarts, multi-instance environments, and concurrent writes because
+ * PostgreSQL enforces row-level uniqueness on (sessionId, clientWriteId).
  */
 export async function persistCanonicalStrengthSet(
   userId: string,
@@ -152,9 +232,89 @@ export async function persistCanonicalStrengthSet(
         : validatedSet.load
       : undefined;
 
+  // 1. Ensure parent StrengthEvidenceSession exists (upsert without overwriting existing data)
+  const initialEvidence: StrengthSessionEvidence = {
+    provenance: {
+      source: source as any,
+      providerSessionId,
+      importedAt: new Date().toISOString(),
+    },
+    title: sessionDefaults?.title,
+    startedAt: sessionDefaults?.startedAt || validatedSet.completedAt,
+    exercises: [
+      {
+        sequence: exerciseIndex,
+        exerciseName,
+        providerExerciseId: performedExerciseId,
+        sets: [],
+      },
+    ],
+  };
+
+  const sessionRow = await prisma.strengthEvidenceSession.upsert({
+    where: {
+      userId_source_providerSessionId: {
+        userId,
+        source,
+        providerSessionId,
+      },
+    },
+    create: {
+      userId,
+      source,
+      providerSessionId,
+      startedAt: new Date(sessionDefaults?.startedAt || validatedSet.completedAt),
+      evidenceVersion: STRENGTH_EVIDENCE_VERSION,
+      evidence: initialEvidence as unknown as Prisma.InputJsonValue,
+    },
+    update: {},
+    select: { id: true },
+  });
+
+  // 2. Count existing sets for this exercise to determine set sequence
+  const currentCount = await prisma.strengthEvidenceSet.count({
+    where: {
+      sessionId: sessionRow.id,
+      performedExerciseId,
+    },
+  });
+
+  // 3. Insert into StrengthEvidenceSet with unique constraint on [sessionId, clientWriteId]
+  try {
+    await prisma.strengthEvidenceSet.create({
+      data: {
+        sessionId: sessionRow.id,
+        clientWriteId: validatedSet.clientWriteId,
+        performedExerciseId,
+        exerciseName,
+        sequence: currentCount,
+        measurementMode: validatedSet.measurementMode,
+        load: validatedSet.load ?? null,
+        loadUnit: validatedSet.loadUnit ?? null,
+        loadSemantics: validatedSet.loadSemantics ?? null,
+        loadKg: loadKg ?? null,
+        reps: validatedSet.reps ?? null,
+        durationSeconds: validatedSet.durationSeconds ?? null,
+        side: validatedSet.side ?? null,
+        rpe: validatedSet.rpe ?? null,
+        rir: validatedSet.rir ?? null,
+        setType: validatedSet.setType ?? 'NORMAL',
+        note: validatedSet.note ?? null,
+        completedAt: new Date(validatedSet.completedAt),
+      },
+    });
+  } catch (error: any) {
+    // Prisma unique constraint violation code is P2002
+    if (error?.code === 'P2002') {
+      return { status: 'DUPLICATE_IGNORED', clientWriteId: validatedSet.clientWriteId };
+    }
+    throw error;
+  }
+
+  // 4. Update the materialized evidence in StrengthEvidenceSession for backwards compatibility
   const newSetEvidence = {
-    sequence: 0,
-    providerSetIndex: 0,
+    sequence: currentCount,
+    providerSetIndex: currentCount,
     clientWriteId: validatedSet.clientWriteId,
     measurementMode: validatedSet.measurementMode,
     ...(validatedSet.load !== undefined ? { load: validatedSet.load } : {}),
@@ -175,84 +335,36 @@ export async function persistCanonicalStrengthSet(
   };
 
   const existingRow = await prisma.strengthEvidenceSession.findUnique({
-    where: {
-      userId_source_providerSessionId: {
-        userId,
-        source,
-        providerSessionId,
-      },
-    },
+    where: { id: sessionRow.id },
     select: { evidence: true },
   });
 
-  if (!existingRow) {
-    // Initial creation with first set
-    const initialEvidence: StrengthSessionEvidence = {
-      provenance: {
-        source: source as any,
-        providerSessionId,
-        importedAt: new Date().toISOString(),
-      },
-      title: sessionDefaults?.title,
-      startedAt: sessionDefaults?.startedAt || validatedSet.completedAt,
-      exercises: [
-        {
-          sequence: exerciseIndex,
-          exerciseName,
-          providerExerciseId: performedExerciseId,
-          sets: [newSetEvidence],
-        },
-      ],
-    };
-
-    await persistStrengthSessionEvidence(userId, initialEvidence);
-    return { status: 'PERSISTED', clientWriteId: validatedSet.clientWriteId, set: validatedSet };
+  if (existingRow?.evidence) {
+    const currentEvidence = existingRow.evidence as unknown as StrengthSessionEvidence;
+    let targetEx = currentEvidence.exercises?.find(
+      (ex) => ex.providerExerciseId === performedExerciseId || ex.sequence === exerciseIndex
+    );
+    if (!targetEx) {
+      targetEx = {
+        sequence: exerciseIndex,
+        exerciseName,
+        providerExerciseId: performedExerciseId,
+        sets: [],
+      };
+      currentEvidence.exercises = currentEvidence.exercises || [];
+      currentEvidence.exercises.push(targetEx);
+      currentEvidence.exercises.sort((a, b) => a.sequence - b.sequence);
+    }
+    // Only append if not already present in evidence JSON
+    if (!targetEx.sets.some((s) => s.clientWriteId === validatedSet.clientWriteId)) {
+      targetEx.sets.push(newSetEvidence);
+      await prisma.strengthEvidenceSession.update({
+        where: { id: sessionRow.id },
+        data: { evidence: currentEvidence as unknown as Prisma.InputJsonValue },
+      });
+    }
   }
-
-  // Update existing session
-  const currentEvidence = existingRow.evidence as unknown as StrengthSessionEvidence;
-
-  // Check for existing set with same clientWriteId anywhere in this session
-  const alreadyWritten = currentEvidence.exercises.some((ex) =>
-    ex.sets.some((s) => s.clientWriteId === validatedSet.clientWriteId)
-  );
-
-  if (alreadyWritten) {
-    return { status: 'DUPLICATE_IGNORED', clientWriteId: validatedSet.clientWriteId };
-  }
-
-  // Append new set to target exercise (or create target exercise)
-  let targetEx = currentEvidence.exercises.find(
-    (ex) => ex.providerExerciseId === performedExerciseId || ex.sequence === exerciseIndex
-  );
-
-  if (!targetEx) {
-    targetEx = {
-      sequence: exerciseIndex,
-      exerciseName,
-      providerExerciseId: performedExerciseId,
-      sets: [],
-    };
-    currentEvidence.exercises.push(targetEx);
-    currentEvidence.exercises.sort((a, b) => a.sequence - b.sequence);
-  }
-
-  newSetEvidence.sequence = targetEx.sets.length;
-  newSetEvidence.providerSetIndex = targetEx.sets.length;
-  targetEx.sets.push(newSetEvidence);
-
-  await prisma.strengthEvidenceSession.update({
-    where: {
-      userId_source_providerSessionId: {
-        userId,
-        source,
-        providerSessionId,
-      },
-    },
-    data: {
-      evidence: currentEvidence as unknown as Prisma.InputJsonValue,
-    },
-  });
 
   return { status: 'PERSISTED', clientWriteId: validatedSet.clientWriteId, set: validatedSet };
 }
+

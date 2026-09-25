@@ -11,6 +11,19 @@ import { snapshotTemplateForSession } from '@/features/training/canonicalTemplat
 import { IdempotentSetWriter } from '@/features/strength-evidence/write-service';
 import type { SessionStatus, SessionOutcome } from './domain';
 
+/**
+ * Architecture & Domain Reconciliation:
+ *
+ * In IronForge, `LiveForgeSession` (defined in `./domain.ts` and managed via `./session-lifecycle.ts`)
+ * is the canonical server/domain lifecycle model.
+ *
+ * `ActiveStrengthSession` (defined below) is a rich client-side UI projection designed for
+ * interactive browser/mobile logging against canonical workout templates (e.g., A1 Belt Squat).
+ * It tracks prescribed exercises, active exercise focus, and immutable canonical sets, which are
+ * then durably persisted via `persistCanonicalStrengthSet()` into the normalized `StrengthEvidenceSet`
+ * and `StrengthEvidenceSession` database records.
+ */
+
 export type LiveForgeSessionStatus = SessionStatus;
 export type LiveForgeSessionOutcome = SessionOutcome;
 
@@ -24,7 +37,11 @@ export interface PerformedExerciseState {
   sets: CanonicalStrengthSet[];
 }
 
+/**
+ * Client UI projection for interactive mobile/web strength logging.
+ */
 export interface ActiveStrengthSession {
+
   sessionId: string;
   userId: string;
   templateCode?: string;

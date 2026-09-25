@@ -83,6 +83,10 @@ describe('prepareStrengthEvidencePersistence', () => {
         evidence: evidence as any,
       } as any);
 
+    const findManySpy = vi
+      .spyOn(prisma.strengthEvidenceSet, 'findMany')
+      .mockResolvedValue([]);
+
     const persistRes = await persistStrengthSessionEvidence('user-1', evidence);
     expect(persistRes.status).toBe('PERSISTED');
     expect(upsertSpy).toHaveBeenCalledTimes(1);
@@ -93,9 +97,10 @@ describe('prepareStrengthEvidencePersistence', () => {
 
     upsertSpy.mockRestore();
     findUniqueSpy.mockRestore();
+    findManySpy.mockRestore();
   });
 
-  it('persistCanonicalStrengthSet persists initial set and ignores duplicate clientWriteId', async () => {
+  it('persistCanonicalStrengthSet persists initial set and ignores duplicate clientWriteId via P2002', async () => {
     const { persistCanonicalStrengthSet } = await import('./persistence');
     const prismaModule = await import('@/lib/prisma');
     const prisma = prismaModule.default;
@@ -113,14 +118,23 @@ describe('prepareStrengthEvidencePersistence', () => {
       setType: 'NORMAL' as const,
     };
 
-    // First write: row does not exist
-    const findUniqueSpy = vi
-      .spyOn(prisma.strengthEvidenceSession, 'findUnique')
-      .mockResolvedValueOnce(null as any);
-    const upsertSpy = vi
+    const sessionUpsertSpy = vi
       .spyOn(prisma.strengthEvidenceSession, 'upsert')
-      .mockResolvedValue({ id: 'row-1' } as any);
+      .mockResolvedValue({ id: 'sess-row-1' } as any);
+    const setCountSpy = vi
+      .spyOn(prisma.strengthEvidenceSet, 'count')
+      .mockResolvedValue(0);
+    const setCreateSpy = vi
+      .spyOn(prisma.strengthEvidenceSet, 'create')
+      .mockResolvedValueOnce({ id: 'set-row-1' } as any);
+    const sessionFindUniqueSpy = vi
+      .spyOn(prisma.strengthEvidenceSession, 'findUnique')
+      .mockResolvedValue({ id: 'sess-row-1', evidence: { exercises: [] } } as any);
+    const sessionUpdateSpy = vi
+      .spyOn(prisma.strengthEvidenceSession, 'update')
+      .mockResolvedValue({ id: 'sess-row-1' } as any);
 
+    // 1. Initial write -> PERSISTED
     const res1 = await persistCanonicalStrengthSet(
       'user-1',
       'IRONFORGE_LIVE_FORGE',
@@ -131,38 +145,12 @@ describe('prepareStrengthEvidencePersistence', () => {
       setInput
     );
     expect(res1.status).toBe('PERSISTED');
-    expect(upsertSpy).toHaveBeenCalledTimes(1);
+    expect(setCreateSpy).toHaveBeenCalledTimes(1);
 
-    // Second write: row exists with this clientWriteId in evidence
-    const existingEvidence: StrengthSessionEvidence = {
-      provenance: { source: 'IRONFORGE_LIVE_FORGE' as any, providerSessionId: 'sess-1' },
-      startedAt: '2026-09-24T18:00:00.000Z',
-      exercises: [
-        {
-          sequence: 0,
-          exerciseName: 'Belt Squat',
-          providerExerciseId: 'ex-1',
-          sets: [
-            {
-              sequence: 0,
-              providerSetIndex: 0,
-              clientWriteId: 'cw-1',
-              load: 100,
-              loadKg: 100,
-              loadUnit: 'KG',
-              loadSemantics: 'TOTAL_EXTERNAL_LOAD',
-              reps: 8,
-              measurementMode: 'LOAD_AND_REPS',
-            },
-          ],
-        },
-      ],
-    };
-
-    findUniqueSpy.mockResolvedValueOnce({
-      id: 'row-1',
-      evidence: existingEvidence as any,
-    } as any);
+    // 2. Duplicate write with same clientWriteId throws P2002 -> DUPLICATE_IGNORED
+    const p2002Error: any = new Error('Unique constraint failed on the fields: (`sessionId`,`clientWriteId`)');
+    p2002Error.code = 'P2002';
+    setCreateSpy.mockRejectedValueOnce(p2002Error);
 
     const res2 = await persistCanonicalStrengthSet(
       'user-1',
@@ -174,9 +162,14 @@ describe('prepareStrengthEvidencePersistence', () => {
       setInput
     );
     expect(res2.status).toBe('DUPLICATE_IGNORED');
+    expect(res2.clientWriteId).toBe('cw-1');
 
-    upsertSpy.mockRestore();
-    findUniqueSpy.mockRestore();
+    sessionUpsertSpy.mockRestore();
+    setCountSpy.mockRestore();
+    setCreateSpy.mockRestore();
+    sessionFindUniqueSpy.mockRestore();
+    sessionUpdateSpy.mockRestore();
   });
 });
+
 
