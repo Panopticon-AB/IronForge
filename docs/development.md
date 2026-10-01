@@ -73,7 +73,6 @@ Environment validation is centralized in `src/env.mjs`. Required variables for n
 
 - `DATABASE_URL`
 - `DIRECT_URL`
-- `GH_PAT`
 - `NEXT_PUBLIC_SUPABASE_URL`
 - `NEXT_PUBLIC_SUPABASE_ANON_KEY`
 
@@ -92,7 +91,7 @@ Additional optional or feature-specific variables appear across scripts, API rou
 
 - README previously referenced npm and Next.js 15; the repo now declares pnpm and Next.js 16.
 - `playwright.config.ts` still invokes `npm run dev` for the web server. This is likely harmless when npm can delegate, but it is inconsistent with `packageManager`.
-- `src/env.mjs` requires `GH_PAT` when env validation is active. That may make local build/dev brittle unless developers provide a token or intentionally set `SKIP_ENV_VALIDATION=true`.
+- Historical note: `src/env.mjs` previously required `GH_PAT` when env validation was active. This was removed in #712 so normal application runtime does not require GitHub credentials. Operator scripts and runner tooling still own their respective `GH_PAT` usage locally.
 - There are several committed historical logs and generated outputs at the repo root (`*_log*.txt`, `*_output*.txt`, prior CI captures, coverage/test output directories). Confirm which are intentional before cleanup.
 - `package.json` includes scripts that use `npm run` and `npx` despite the pnpm baseline. Audit before changing because some scripts may be CI-specific.
 - `pnpm build` runs `prebuild`, which currently calls `npm run clean:logs`. Treat build as a potentially workspace-mutating check until that behavior is reviewed.

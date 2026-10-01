@@ -9,7 +9,6 @@ const serverSchema = z.object({
   SUPABASE_SERVICE_KEY: z.string().optional(),
   SUPABASE_PROJECT_REF: z.string().optional(),
   GOOGLE_MAPS_API_KEY: z.string().optional(),
-  GH_PAT: z.string().min(1),
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
 });
 
@@ -30,7 +29,6 @@ const processEnv = {
   SUPABASE_SERVICE_KEY: process.env.SUPABASE_SERVICE_KEY,
   SUPABASE_PROJECT_REF: process.env.SUPABASE_PROJECT_REF,
   GOOGLE_MAPS_API_KEY: process.env.GOOGLE_MAPS_API_KEY,
-  GH_PAT: process.env.GH_PAT,
   NODE_ENV: process.env.NODE_ENV,
   NEXT_PUBLIC_SUPABASE_URL: process.env.NEXT_PUBLIC_SUPABASE_URL,
   NEXT_PUBLIC_SUPABASE_ANON_KEY: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY,
