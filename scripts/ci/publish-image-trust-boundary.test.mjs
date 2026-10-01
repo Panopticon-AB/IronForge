@@ -31,6 +31,54 @@ function parseRunsOnList(block) {
   return [];
 }
 
+function extractIfCondition(block) {
+  const singleLineMatch = block.match(/^\s+if:\s*(.+)$/m);
+  if (!singleLineMatch) {
+    return '';
+  }
+  return singleLineMatch[1].trim();
+}
+
+function validatePublishImageIfCondition(ifExpr) {
+  const normalized = ifExpr
+    .replace(/^\${{\s*(.*)\s*}}$/, '$1')
+    .replace(/\s+/g, ' ')
+    .trim();
+
+  // Split at top-level OR to detect any disjunction
+  if (/\s*\|\|\s*/.test(normalized)) {
+    throw new Error(`publish-image.if must not contain disjunctions (||): received "${ifExpr}"`);
+  }
+
+  // Split into conjuncts by top-level &&
+  const conjuncts = normalized.split(/\s+&&\s+/).map((c) =>
+    c
+      .trim()
+      .replace(/^\((.*)\)$/, '$1')
+      .trim()
+  );
+
+  let hasExactMainBranch = false;
+  let hasExactPushEvent = false;
+
+  for (const c of conjuncts) {
+    if (c === "github.ref == 'refs/heads/main'" || c === 'github.ref == "refs/heads/main"') {
+      hasExactMainBranch = true;
+    } else if (c === "github.event_name == 'push'" || c === 'github.event_name == "push"') {
+      hasExactPushEvent = true;
+    } else {
+      throw new Error(`publish-image.if contains unauthorized conjunct: "${c}"`);
+    }
+  }
+
+  if (!hasExactMainBranch || !hasExactPushEvent || conjuncts.length !== 2) {
+    throw new Error(
+      `publish-image.if must be strictly a conjunction of main branch and push event: received "${ifExpr}"`
+    );
+  }
+  return true;
+}
+
 test('publish-image requires live-approved trust class and cannot use generic self-hosted only', () => {
   const block = publishImageBlock();
   const runsOn = parseRunsOnList(block);
@@ -54,22 +102,76 @@ test('publish-image requires live-approved trust class and cannot use generic se
   assert.ok(runsOnPrReadonly.includes('pr-readonly'));
 });
 
-test('publish-image is strictly restricted to push on main branch (no PR or dispatch access)', () => {
+test('publish-image is strictly restricted to push on main branch (conjunctive event boundary)', () => {
   const block = publishImageBlock();
+  const ifCondition = extractIfCondition(block);
 
-  assert.match(block, /github\.event_name == 'push'/);
-  assert.match(block, /github\.ref == 'refs\/heads\/main'/);
+  // Structural conjunction validation on current workflow
+  assert.ok(validatePublishImageIfCondition(ifCondition));
+
+  // Must not allow PR or dispatch or fix/* branches
   assert.doesNotMatch(block, /github\.event_name == 'pull_request'/);
   assert.doesNotMatch(block, /github\.event_name == 'workflow_dispatch'/);
   assert.doesNotMatch(block, /startsWith\(github\.ref,\s*'refs\/heads\/fix\/'\)/);
   assert.doesNotMatch(block, /needs:\s*\[classify-pr-impact/);
 
-  // Negative assertion: if broadened to pull_request, regression catches it
-  const broadenedBlock = block.replace(
-    /github\.event_name == 'push'/,
-    "github.event_name == 'pull_request'"
+  // Negative tests against all mutations:
+  // 1. main || push (disjunction)
+  assert.throws(
+    () =>
+      validatePublishImageIfCondition(
+        "github.ref == 'refs/heads/main' || github.event_name == 'push'"
+      ),
+    /must not contain disjunctions/
   );
-  assert.match(broadenedBlock, /github\.event_name == 'pull_request'/);
+
+  // 2. push only (missing main branch)
+  assert.throws(
+    () => validatePublishImageIfCondition("github.event_name == 'push'"),
+    /must be strictly a conjunction of main branch and push event/
+  );
+
+  // 3. main only (missing push event)
+  assert.throws(
+    () => validatePublishImageIfCondition("github.ref == 'refs/heads/main'"),
+    /must be strictly a conjunction of main branch and push event/
+  );
+
+  // 4. pull_request
+  assert.throws(
+    () =>
+      validatePublishImageIfCondition(
+        "github.ref == 'refs/heads/main' && github.event_name == 'pull_request'"
+      ),
+    /contains unauthorized conjunct/
+  );
+
+  // 5. workflow_dispatch
+  assert.throws(
+    () =>
+      validatePublishImageIfCondition(
+        "github.ref == 'refs/heads/main' && github.event_name == 'workflow_dispatch'"
+      ),
+    /contains unauthorized conjunct/
+  );
+
+  // 6. fix/* branch broadening
+  assert.throws(
+    () =>
+      validatePublishImageIfCondition(
+        "startsWith(github.ref, 'refs/heads/fix/') && github.event_name == 'push'"
+      ),
+    /contains unauthorized conjunct/
+  );
+
+  // 7. Extra conjunct added
+  assert.throws(
+    () =>
+      validatePublishImageIfCondition(
+        "github.ref == 'refs/heads/main' && github.event_name == 'push' && true"
+      ),
+    /contains unauthorized conjunct/
+  );
 });
 
 test('publish-image retains package-write and Docker push authority guarded by live-approved', () => {
