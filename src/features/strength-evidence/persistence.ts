@@ -31,7 +31,7 @@ export type PreparedStrengthEvidencePersistence =
 
 export function prepareStrengthEvidencePersistence(
   userId: string,
-  evidence: StrengthSessionEvidence,
+  evidence: StrengthSessionEvidence
 ): PreparedStrengthEvidencePersistence {
   const providerSessionId = evidence.provenance.providerSessionId;
 
@@ -64,7 +64,7 @@ export type PersistStrengthEvidenceResult =
 
 export async function persistStrengthSessionEvidence(
   userId: string,
-  evidence: StrengthSessionEvidence,
+  evidence: StrengthSessionEvidence
 ): Promise<PersistStrengthEvidenceResult> {
   const prepared = prepareStrengthEvidencePersistence(userId, evidence);
 
@@ -162,7 +162,8 @@ export async function getStrengthSessionEvidence(
       measurementMode: setRow.measurementMode,
     };
     if (setRow.load !== null && setRow.load !== undefined) setItem.load = setRow.load;
-    if (setRow.loadUnit !== null && setRow.loadUnit !== undefined) setItem.loadUnit = setRow.loadUnit;
+    if (setRow.loadUnit !== null && setRow.loadUnit !== undefined)
+      setItem.loadUnit = setRow.loadUnit;
     if (setRow.loadSemantics !== null && setRow.loadSemantics !== undefined)
       setItem.loadSemantics = setRow.loadSemantics;
     if (setRow.loadKg !== null && setRow.loadKg !== undefined) setItem.loadKg = setRow.loadKg;
@@ -220,7 +221,11 @@ export async function getCanonicalStrengthSets(
     orderBy: [{ completedAt: 'asc' }, { id: 'asc' }],
   });
 
-  return rows.map((r) => ({
+  return rows.map(rowToCanonicalStrengthSet);
+}
+
+export function rowToCanonicalStrengthSet(r: any): CanonicalStrengthSet {
+  return {
     id: r.id,
     performedExerciseId: r.performedExerciseId,
     measurementMode: r.measurementMode as any,
@@ -238,19 +243,18 @@ export async function getCanonicalStrengthSets(
     ...(r.rpe !== null && r.rpe !== undefined ? { rpe: r.rpe } : {}),
     ...(r.rir !== null && r.rir !== undefined ? { rir: r.rir } : {}),
     setType: r.setType as any,
-    completedAt: r.completedAt.toISOString(),
+    completedAt: r.completedAt instanceof Date ? r.completedAt.toISOString() : r.completedAt,
     clientWriteId: r.clientWriteId,
     ...(r.note !== null && r.note !== undefined ? { note: r.note } : {}),
-    createdAt: r.createdAt.toISOString(),
-    updatedAt: r.updatedAt.toISOString(),
-  }));
+    createdAt: r.createdAt instanceof Date ? r.createdAt.toISOString() : r.createdAt,
+    updatedAt: r.updatedAt instanceof Date ? r.updatedAt.toISOString() : r.updatedAt,
+  };
 }
 
 export type PersistCanonicalSetResult =
   | { status: 'PERSISTED'; clientWriteId: string; set: CanonicalStrengthSet }
-  | { status: 'DUPLICATE_IGNORED'; clientWriteId: string }
+  | { status: 'DUPLICATE_IGNORED'; clientWriteId: string; set?: CanonicalStrengthSet }
   | { status: 'INVALID_INPUT'; error: string };
-
 
 /**
  * Persists a canonical strength set into the database session evidence idempotently.
@@ -305,25 +309,48 @@ export async function persistCanonicalStrengthSet(
     ],
   };
 
-  const sessionRow = await prisma.strengthEvidenceSession.upsert({
-    where: {
-      userId_source_providerSessionId: {
+  let sessionRow: { id: string };
+  try {
+    sessionRow = await prisma.strengthEvidenceSession.upsert({
+      where: {
+        userId_source_providerSessionId: {
+          userId,
+          source,
+          providerSessionId,
+        },
+      },
+      create: {
         userId,
         source,
         providerSessionId,
+        startedAt: new Date(sessionDefaults?.startedAt || validatedSet.completedAt),
+        evidenceVersion: STRENGTH_EVIDENCE_VERSION,
+        evidence: initialEvidence as unknown as Prisma.InputJsonValue,
       },
-    },
-    create: {
-      userId,
-      source,
-      providerSessionId,
-      startedAt: new Date(sessionDefaults?.startedAt || validatedSet.completedAt),
-      evidenceVersion: STRENGTH_EVIDENCE_VERSION,
-      evidence: initialEvidence as unknown as Prisma.InputJsonValue,
-    },
-    update: {},
-    select: { id: true },
-  });
+      update: {},
+      select: { id: true },
+    });
+  } catch (err: any) {
+    if (err?.code === 'P2002') {
+      const existing = await prisma.strengthEvidenceSession.findUnique({
+        where: {
+          userId_source_providerSessionId: {
+            userId,
+            source,
+            providerSessionId,
+          },
+        },
+        select: { id: true },
+      });
+      if (existing) {
+        sessionRow = existing;
+      } else {
+        throw err;
+      }
+    } else {
+      throw err;
+    }
+  }
 
   // 2. Count existing sets for this exercise to determine set sequence
   const currentCount = await prisma.strengthEvidenceSet.count({
@@ -361,6 +388,21 @@ export async function persistCanonicalStrengthSet(
   } catch (error: any) {
     // Prisma unique constraint violation code is P2002
     if (error?.code === 'P2002') {
+      const existingSetRow = await prisma.strengthEvidenceSet.findUnique({
+        where: {
+          sessionId_clientWriteId: {
+            sessionId: sessionRow.id,
+            clientWriteId: validatedSet.clientWriteId,
+          },
+        },
+      });
+      if (existingSetRow) {
+        return {
+          status: 'DUPLICATE_IGNORED',
+          clientWriteId: validatedSet.clientWriteId,
+          set: rowToCanonicalStrengthSet(existingSetRow),
+        };
+      }
       return { status: 'DUPLICATE_IGNORED', clientWriteId: validatedSet.clientWriteId };
     }
     throw error;
@@ -447,4 +489,3 @@ export async function persistCanonicalStrengthSet(
 
   return { status: 'PERSISTED', clientWriteId: validatedSet.clientWriteId, set: canonicalSet };
 }
-

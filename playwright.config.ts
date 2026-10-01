@@ -7,7 +7,7 @@ import dotenv from 'dotenv';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-dotenv.config({ path: path.resolve(__dirname, '.env') });
+dotenv.config({ path: path.resolve(__dirname, '.env'), override: false });
 
 export default defineConfig({
   globalSetup:
@@ -82,6 +82,12 @@ export default defineConfig({
         ...devices['Desktop Chrome'],
       },
     },
+    {
+      name: 'mobile-smoke',
+      use: {
+        ...devices['Pixel 5'],
+      },
+    },
   ],
 
   /* Run your local dev server before starting the tests */
@@ -92,7 +98,7 @@ export default defineConfig({
     !process.env.BASE_URL.includes('127.0.0.1')
       ? undefined
       : {
-          command: 'npm run dev -- -p 3001 -H 127.0.0.1',
+          command: 'pnpm exec next dev -p 3001 -H 127.0.0.1',
           url: 'http://127.0.0.1:3001',
           reuseExistingServer: !process.env.CI,
           timeout: 120 * 1000,

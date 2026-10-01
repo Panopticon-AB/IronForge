@@ -16,7 +16,13 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
 
   beforeAll(async () => {
     try {
-      await prisma.strengthEvidenceSet.deleteMany({});
+      const existing = await prisma.strengthEvidenceSession.findMany({
+        where: { userId: testUserId },
+        select: { id: true },
+      });
+      for (const sess of existing) {
+        await prisma.strengthEvidenceSet.deleteMany({ where: { sessionId: sess.id } });
+      }
       await prisma.strengthEvidenceSession.deleteMany({
         where: { userId: testUserId },
       });
@@ -27,7 +33,13 @@ describe('Integration: Canonical Strength Evidence Persistence & Idempotency', (
 
   afterAll(async () => {
     try {
-      await prisma.strengthEvidenceSet.deleteMany({});
+      const existing = await prisma.strengthEvidenceSession.findMany({
+        where: { userId: testUserId },
+        select: { id: true },
+      });
+      for (const sess of existing) {
+        await prisma.strengthEvidenceSet.deleteMany({ where: { sessionId: sess.id } });
+      }
       await prisma.strengthEvidenceSession.deleteMany({
         where: { userId: testUserId },
       });

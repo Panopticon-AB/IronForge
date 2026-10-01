@@ -76,7 +76,6 @@ export function MobileStrengthLogger({
       setType: 'NORMAL',
     };
 
-
     if (isWeighted) {
       const parsedLoad = Number.parseFloat(load);
       if (Number.isNaN(parsedLoad) || parsedLoad < 0) {
@@ -154,10 +153,11 @@ export function MobileStrengthLogger({
 
         {/* Completed Sets Summary */}
         {exercise.sets.length > 0 && (
-          <div className="flex flex-wrap gap-1.5 pt-1">
+          <div className="flex flex-wrap gap-1.5 pt-1" data-testid="logged-sets-list">
             {exercise.sets.map((s, idx) => (
               <span
                 key={s.clientWriteId || idx}
+                data-testid="logged-set-item"
                 className="text-xs bg-zinc-900 border border-zinc-700/60 px-2 py-1 rounded font-mono text-zinc-300"
               >
                 {s.side ? (s.side === 'LEFT' ? 'V ' : 'H ') : ''}
@@ -211,7 +211,10 @@ export function MobileStrengthLogger({
         <div className="grid grid-cols-2 gap-3">
           {isWeighted && (
             <div className={hasReps ? 'col-span-1' : 'col-span-2'}>
-              <label htmlFor="input-load" className="block text-xs uppercase font-mono text-zinc-400 mb-1">
+              <label
+                htmlFor="input-load"
+                className="block text-xs uppercase font-mono text-zinc-400 mb-1"
+              >
                 Vikt (kg)
               </label>
               <input
@@ -228,7 +231,10 @@ export function MobileStrengthLogger({
 
           {hasReps && (
             <div className={isWeighted ? 'col-span-1' : 'col-span-2'}>
-              <label htmlFor="input-reps" className="block text-xs uppercase font-mono text-zinc-400 mb-1">
+              <label
+                htmlFor="input-reps"
+                className="block text-xs uppercase font-mono text-zinc-400 mb-1"
+              >
                 Reps
               </label>
               <input
@@ -245,7 +251,10 @@ export function MobileStrengthLogger({
 
           {hasDuration && (
             <div className="col-span-2">
-              <label htmlFor="input-duration" className="block text-xs uppercase font-mono text-zinc-400 mb-1">
+              <label
+                htmlFor="input-duration"
+                className="block text-xs uppercase font-mono text-zinc-400 mb-1"
+              >
                 Sekunder
               </label>
               <input

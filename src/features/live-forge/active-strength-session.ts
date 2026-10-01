@@ -41,7 +41,6 @@ export interface PerformedExerciseState {
  * Client UI projection for interactive mobile/web strength logging.
  */
 export interface ActiveStrengthSession {
-
   sessionId: string;
   userId: string;
   templateCode?: string;
@@ -133,7 +132,6 @@ export class LiveStrengthSessionManager {
       createdAt: writeResult.set.createdAt || setInput.completedAt,
       updatedAt: writeResult.set.updatedAt || setInput.completedAt,
     };
-
 
     const nextExercises = session.performedExercises.map((e, idx) => {
       if (idx !== exerciseIndex) return e;

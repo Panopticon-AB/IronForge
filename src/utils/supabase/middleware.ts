@@ -24,13 +24,15 @@ export async function updateSession(request: NextRequest) {
           return request.cookies.getAll();
         },
         setAll(cookiesToSet: { name: string; value: string; options?: Partial<ResponseCookie> }[]) {
-          cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+          cookiesToSet.forEach(({ name, value }) => {
+            request.cookies.set(name, value);
+          });
           supabaseResponse = NextResponse.next({
             request,
           });
-          cookiesToSet.forEach(({ name, value, options }) =>
-            supabaseResponse.cookies.set(name, value, options)
-          );
+          cookiesToSet.forEach(({ name, value, options }) => {
+            supabaseResponse.cookies.set(name, value, options);
+          });
         },
       },
     }
@@ -44,12 +46,16 @@ export async function updateSession(request: NextRequest) {
     data: { user },
   } = await supabase.auth.getUser();
 
+  const isE2EMode =
+    process.env.NODE_ENV !== 'production' && process.env.IRONFORGE_E2E_MODE === 'true';
+
   const isPublicRoute =
     request.nextUrl.pathname.startsWith('/login') ||
     request.nextUrl.pathname.startsWith('/auth') ||
     request.nextUrl.pathname.startsWith('/welcome') ||
     request.nextUrl.pathname.startsWith('/marketing') ||
-    request.nextUrl.pathname.startsWith('/factory');
+    request.nextUrl.pathname.startsWith('/factory') ||
+    (isE2EMode && request.nextUrl.pathname.startsWith('/live'));
 
   if (!user && !isPublicRoute) {
     // no user, potentially respond by redirecting the user to the login page
