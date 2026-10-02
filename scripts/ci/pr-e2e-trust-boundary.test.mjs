@@ -1,12 +1,16 @@
-import { readFile } from 'node:fs/promises';
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-const [ciWorkflow, publicSmokeWorkflow, playwrightConfig] = await Promise.all([
+const [rawCiWorkflow, rawPublicSmokeWorkflow, rawPlaywrightConfig] = await Promise.all([
   readFile('.github/workflows/ci-cd.yml', 'utf8'),
   readFile('.github/workflows/pr-public-smoke.yml', 'utf8'),
   readFile('playwright.config.ts', 'utf8'),
 ]);
+
+const ciWorkflow = rawCiWorkflow.replace(/\r\n/g, '\n');
+const publicSmokeWorkflow = rawPublicSmokeWorkflow.replace(/\r\n/g, '\n');
+const playwrightConfig = rawPlaywrightConfig.replace(/\r\n/g, '\n');
 
 function classifierBlock() {
   const start = ciWorkflow.indexOf('\n  classify-pr-impact:\n');
@@ -22,7 +26,10 @@ function classifierBlock() {
 
 function fullE2EBlock() {
   const start = ciWorkflow.indexOf('\n  e2e:\n');
-  const end = ciWorkflow.indexOf('\n  # ==================================================================\n  # PHASE 3:', start);
+  const end = ciWorkflow.indexOf(
+    '\n  # ==================================================================\n  # PHASE 3:',
+    start
+  );
 
   assert.notEqual(start, -1, 'ci-cd.yml must contain the full e2e job');
   assert.notEqual(end, -1, 'ci-cd.yml must retain the PHASE 3 boundary after the e2e job');
@@ -44,7 +51,10 @@ test('PR public smoke is base-controlled, hosted and secretless', () => {
   assert.match(publicSmokeWorkflow, /^\s*pull_request_target:\s*$/m);
   assert.match(publicSmokeWorkflow, /^\s*permissions:\s*\n\s+contents:\s*read\s*$/m);
   assert.match(publicSmokeWorkflow, /^\s*runs-on:\s*ubuntu-latest\s*$/m);
-  assert.match(publicSmokeWorkflow, /repository:\s*\$\{\{ github\.event\.pull_request\.head\.repo\.full_name \}\}/);
+  assert.match(
+    publicSmokeWorkflow,
+    /repository:\s*\$\{\{ github\.event\.pull_request\.head\.repo\.full_name \}\}/
+  );
   assert.match(publicSmokeWorkflow, /ref:\s*\$\{\{ github\.event\.pull_request\.head\.sha \}\}/);
   assert.match(publicSmokeWorkflow, /persist-credentials:\s*false/);
   assert.match(publicSmokeWorkflow, /package-manager-cache:\s*false/);

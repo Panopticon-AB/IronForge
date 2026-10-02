@@ -5,6 +5,7 @@ on:
     paths:
       - '.github/workflows/**'
       - 'scripts/ci/pr-e2e-trust-boundary.test.mjs'
+      - 'scripts/ci/publish-image-trust-boundary.test.mjs'
       - 'playwright.config.ts'
   workflow_dispatch:
 
@@ -26,6 +27,9 @@ jobs:
 
       - name: Verify PR E2E trust boundary
         run: node --test scripts/ci/pr-e2e-trust-boundary.test.mjs
+
+      - name: Verify Docker publish trust boundary
+        run: node --test scripts/ci/publish-image-trust-boundary.test.mjs
 
       - name: Check Node and pnpm Versions
         shell: bash

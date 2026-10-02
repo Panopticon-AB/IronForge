@@ -644,7 +644,7 @@ jobs:
     name: 📦 Publish Docker Image
     needs: [l2-verification]
     if: github.ref == 'refs/heads/main' && github.event_name == 'push'
-    runs-on: [self-hosted, linux, panopticon, ci, small]
+    runs-on: [self-hosted, linux, panopticon, ci, small, live-approved]
     permissions:
       contents: read
       packages: write
